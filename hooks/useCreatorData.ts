@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/app/integrations/supabase/client';
 
 export interface CreatorData {
@@ -44,12 +44,9 @@ export function useCreatorData(creatorHandle?: string) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchCreatorData();
-  }, [creatorHandle]);
-
-  const fetchCreatorData = async () => {
+  const fetchCreatorData = useCallback(async () => {
     try {
+      console.log('[useCreatorData] Starting fetch...', { creatorHandle });
       setLoading(true);
       setError(null);
 
@@ -59,28 +56,49 @@ export function useCreatorData(creatorHandle?: string) {
         .eq('is_active', true);
 
       if (creatorHandle) {
+        console.log('[useCreatorData] Filtering by creator_handle:', creatorHandle);
         query = query.eq('creator_handle', creatorHandle);
       }
 
-      const { data, error: fetchError } = await query.single();
+      // Use limit(1) and get first result instead of .single()
+      const { data, error: fetchError } = await query.limit(1);
 
       if (fetchError) {
-        console.error('Error fetching creator data:', fetchError);
+        console.error('[useCreatorData] Fetch error:', fetchError);
         setError(fetchError.message);
+        setLoading(false);
         return;
       }
 
-      if (data) {
-        console.log('Creator data fetched successfully:', data.creator_handle);
-        setCreator(data as CreatorData);
+      console.log('[useCreatorData] Query result:', { 
+        dataLength: data?.length, 
+        hasData: !!data && data.length > 0 
+      });
+
+      if (data && data.length > 0) {
+        const creatorData = data[0] as CreatorData;
+        console.log('[useCreatorData] Creator data loaded:', {
+          handle: creatorData.creator_handle,
+          name: `${creatorData.first_name} ${creatorData.last_name}`,
+          diamonds: creatorData.total_diamonds
+        });
+        setCreator(creatorData);
+      } else {
+        console.warn('[useCreatorData] No creator data found');
+        setError('No creator data found');
       }
     } catch (err) {
-      console.error('Unexpected error fetching creator data:', err);
+      console.error('[useCreatorData] Unexpected error:', err);
       setError('Failed to fetch creator data');
     } finally {
       setLoading(false);
     }
-  };
+  }, [creatorHandle]);
+
+  useEffect(() => {
+    console.log('[useCreatorData] Effect triggered');
+    fetchCreatorData();
+  }, [fetchCreatorData]);
 
   const getCreatorStats = (): CreatorStats | null => {
     if (!creator) return null;
