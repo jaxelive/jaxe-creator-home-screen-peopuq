@@ -32,7 +32,8 @@ export default function HomeScreen() {
     Poppins_700Bold,
   });
   
-  const { creator, loading, error, stats, refetch } = useCreatorData();
+  // Using avelezsanti as the default creator for testing
+  const { creator, loading, error, stats, refetch } = useCreatorData('avelezsanti');
   const [nextBattle, setNextBattle] = useState<any>(null);
   const [challengeProgress, setChallengeProgress] = useState(0);
   const [educationProgress, setEducationProgress] = useState(0);
@@ -47,6 +48,14 @@ export default function HomeScreen() {
 
   useEffect(() => {
     if (creator) {
+      console.log('[HomeScreen] Creator loaded:', {
+        handle: creator.creator_handle,
+        name: `${creator.first_name} ${creator.last_name}`,
+        monthlyDiamonds: creator.diamonds_monthly,
+        totalDiamonds: creator.total_diamonds,
+        liveDays: creator.live_days_30d,
+        liveHours: Math.floor(creator.live_duration_seconds_30d / 3600)
+      });
       fetchBattleData();
       fetchLearningData();
     }
@@ -65,12 +74,19 @@ export default function HomeScreen() {
         .order('battle_date', { ascending: true })
         .limit(1);
 
-      if (error) throw error;
+      if (error) {
+        console.error('[HomeScreen] Error fetching battle data:', error);
+        return;
+      }
+      
       if (data && data.length > 0) {
+        console.log('[HomeScreen] Next battle found:', data[0]);
         setNextBattle(data[0]);
+      } else {
+        console.log('[HomeScreen] No upcoming battles found');
       }
     } catch (error: any) {
-      console.error('Error fetching battle data:', error);
+      console.error('[HomeScreen] Unexpected error fetching battle data:', error);
     }
   };
 
@@ -85,8 +101,13 @@ export default function HomeScreen() {
         .eq('creator_id', creator.id)
         .eq('is_completed', true);
 
-      if (challengeError) throw challengeError;
-      setChallengeProgress(challengeData?.length || 0);
+      if (challengeError) {
+        console.error('[HomeScreen] Error fetching challenge data:', challengeError);
+      } else {
+        const completedDays = challengeData?.length || 0;
+        console.log('[HomeScreen] Challenge progress:', completedDays, '/21');
+        setChallengeProgress(completedDays);
+      }
 
       // Fetch UR education progress
       const { data: educationData, error: educationError } = await supabase
@@ -95,10 +116,15 @@ export default function HomeScreen() {
         .eq('creator_id', creator.id)
         .eq('quiz_passed', true);
 
-      if (educationError) throw educationError;
-      setEducationProgress(educationData?.length || 0);
+      if (educationError) {
+        console.error('[HomeScreen] Error fetching education data:', educationError);
+      } else {
+        const completedVideos = educationData?.length || 0;
+        console.log('[HomeScreen] Education progress:', completedVideos, '/5');
+        setEducationProgress(completedVideos);
+      }
     } catch (error: any) {
-      console.error('Error fetching learning data:', error);
+      console.error('[HomeScreen] Unexpected error fetching learning data:', error);
     }
   };
 
@@ -192,7 +218,7 @@ export default function HomeScreen() {
                 source={{ uri: profileImageUrl }}
                 style={styles.headerAvatar}
               />
-              <Text style={styles.headerGreeting}>Hello, {fullName}</Text>
+              <Text style={styles.headerGreeting}>Welcome, {fullName}!</Text>
               <Text style={styles.headerHandle}>@{creator.creator_handle}</Text>
               <View style={styles.headerBadges}>
                 <View style={styles.headerBadge}>
@@ -210,7 +236,7 @@ export default function HomeScreen() {
                 <View style={styles.cardHeader}>
                   <Text style={styles.cardEmoji}>💎</Text>
                   <View style={styles.cardHeaderText}>
-                    <Text style={styles.cardTitleLarge}>Diamonds This Month</Text>
+                    <Text style={styles.cardTitleLarge}>Monthly Diamonds</Text>
                     <Text style={styles.cardSubtitle}>Resets every 1st of the month</Text>
                   </View>
                 </View>
@@ -224,41 +250,21 @@ export default function HomeScreen() {
                   />
                 </View>
                 <Text style={styles.progressHint}>
-                  You need {stats.remaining.toLocaleString()} more diamonds to reach your next bonus
+                  {stats.remaining > 0 
+                    ? `You need ${stats.remaining.toLocaleString()} more diamonds to reach ${stats.nextTarget}`
+                    : `Congratulations! You've reached ${stats.nextTarget}!`
+                  }
                 </Text>
               </View>
             </CardPressable>
 
-            {/* LIVE HOURS & VALID DAYS CARD */}
-            <CardPressable onPress={() => console.log('Live stats tapped')}>
+            {/* NEXT GRADUATION CARD */}
+            <CardPressable onPress={() => router.push('/(tabs)/bonuses')}>
               <View style={styles.card}>
                 <View style={styles.cardHeader}>
-                  <Text style={styles.cardEmoji}>📊</Text>
+                  <Text style={styles.cardEmoji}>🎯</Text>
                   <View style={styles.cardHeaderText}>
-                    <Text style={styles.cardTitleLarge}>Live Activity</Text>
-                    <Text style={styles.cardSubtitle}>Last 30 days</Text>
-                  </View>
-                </View>
-                <View style={styles.statsRow}>
-                  <View style={styles.statBox}>
-                    <Text style={styles.statNumber}>{stats.liveHours}</Text>
-                    <Text style={styles.statLabel}>Live Hours</Text>
-                  </View>
-                  <View style={styles.statBox}>
-                    <Text style={styles.statNumber}>{stats.liveDays}</Text>
-                    <Text style={styles.statLabel}>Valid Days</Text>
-                  </View>
-                </View>
-              </View>
-            </CardPressable>
-
-            {/* GRADUATION STATUS CARD */}
-            <CardPressable onPress={() => console.log('Graduation tapped')}>
-              <View style={styles.card}>
-                <View style={styles.cardHeader}>
-                  <Text style={styles.cardEmoji}>🎓</Text>
-                  <View style={styles.cardHeaderText}>
-                    <Text style={styles.cardTitleLarge}>Graduation Status</Text>
+                    <Text style={styles.cardTitleLarge}>Next Graduation: {stats.nextTarget}</Text>
                     <Text style={styles.cardSubtitle}>{stats.currentStatus}</Text>
                   </View>
                 </View>
@@ -270,103 +276,116 @@ export default function HomeScreen() {
                     style={[styles.progressBarFill, { width: `${Math.min(stats.currentProgress, 100)}%` }]}
                   />
                 </View>
-                <Text style={styles.progressHint}>
-                  You are {stats.currentProgress.toFixed(1)}% of the way to {stats.nextTarget}
-                </Text>
+                <View style={styles.graduationStats}>
+                  <Text style={styles.graduationLabel}>Current Progress: {stats.currentProgress.toFixed(1)}%</Text>
+                  <Text style={styles.graduationLabel}>Remaining: {stats.remaining.toLocaleString()}</Text>
+                </View>
               </View>
             </CardPressable>
 
-            {/* BONUSES & CONTESTS SNAPSHOT CARD */}
-            <CardPressable onPress={() => router.push('/(tabs)/bonuses')}>
+            {/* MISSIONS OVERVIEW CARD */}
+            <CardPressable onPress={() => router.push('/(tabs)/learning-hub')}>
               <View style={styles.card}>
                 <View style={styles.cardHeader}>
-                  <Text style={styles.cardEmoji}>💰</Text>
+                  <Text style={styles.cardEmoji}>🧩</Text>
                   <View style={styles.cardHeaderText}>
-                    <Text style={styles.cardTitleLarge}>Bonuses & Contests</Text>
-                    <Text style={styles.cardSubtitle}>Your earnings overview</Text>
+                    <Text style={styles.cardTitleLarge}>Missions Overview</Text>
+                    <Text style={styles.cardSubtitle}>Your learning progress</Text>
                   </View>
                 </View>
-                <View style={styles.statsRow}>
-                  <View style={styles.statBox}>
-                    <Text style={styles.statNumber}>$0</Text>
-                    <Text style={styles.statLabel}>Earned</Text>
+                <View style={styles.missionsGrid}>
+                  <View style={styles.missionBox}>
+                    <Text style={styles.missionIcon}>🎓</Text>
+                    <Text style={styles.missionTitle}>Education</Text>
+                    <Text style={styles.missionProgress}>{educationProgress}/5</Text>
+                    <View style={styles.miniProgressBar}>
+                      <View style={[styles.miniProgressFill, { width: `${(educationProgress / 5) * 100}%` }]} />
+                    </View>
                   </View>
-                  <View style={styles.statBox}>
-                    <Text style={styles.statNumber}>$0</Text>
-                    <Text style={styles.statLabel}>Pending</Text>
+                  <View style={styles.missionBox}>
+                    <Text style={styles.missionIcon}>🔥</Text>
+                    <Text style={styles.missionTitle}>21-Day Challenge</Text>
+                    <Text style={styles.missionProgress}>{challengeProgress}/21</Text>
+                    <View style={styles.miniProgressBar}>
+                      <View style={[styles.miniProgressFill, { width: `${(challengeProgress / 21) * 100}%` }]} />
+                    </View>
+                    <Text style={styles.missionSubtext}>{21 - challengeProgress} days to go</Text>
+                  </View>
+                  <View style={styles.missionBox}>
+                    <Text style={styles.missionIcon}>💵</Text>
+                    <Text style={styles.missionTitle}>Bonus Forecast</Text>
+                    <Text style={styles.missionProgress}>$0.00</Text>
+                    <View style={styles.statusPill}>
+                      <Text style={styles.statusPillText}>Rising</Text>
+                    </View>
+                    <Text style={styles.missionSubtext}>{stats.liveHours} hrs • {stats.monthlyDiamonds} diamonds • {stats.liveDays} day</Text>
                   </View>
                 </View>
-                <Text style={styles.contestInfo}>No active contests</Text>
               </View>
             </CardPressable>
 
-            {/* BATTLE REMINDER CARD */}
+            {/* UPCOMING BATTLES CARD */}
             <CardPressable onPress={() => router.push('/(tabs)/battles')}>
               <View style={styles.card}>
                 <View style={styles.cardHeader}>
                   <Text style={styles.cardEmoji}>⚔️</Text>
                   <View style={styles.cardHeaderText}>
-                    <Text style={styles.cardTitleLarge}>Battle Reminder</Text>
-                    <Text style={styles.cardSubtitle}>Monthly battles</Text>
+                    <Text style={styles.cardTitleLarge}>Upcoming Battles</Text>
+                    <Text style={styles.cardSubtitle}>Schedule your monthly battle</Text>
                   </View>
                 </View>
                 {nextBattle ? (
                   <>
-                    <Text style={styles.battleScheduled}>
-                      Next battle: {formatBattleDate(nextBattle.battle_date)} at {formatBattleTime(nextBattle.battle_time)}
-                    </Text>
-                    <Text style={styles.battleOpponent}>
-                      vs @{nextBattle.creator_1_id === creator.id ? nextBattle.creator_2_handle : nextBattle.creator_1_handle}
-                    </Text>
+                    <View style={styles.battleItem}>
+                      <Text style={styles.battleDate}>
+                        {formatBattleDate(nextBattle.battle_date)} • {formatBattleTime(nextBattle.battle_time)}
+                      </Text>
+                      <Text style={styles.battleOpponent}>
+                        VS @{nextBattle.creator_1_id === creator.id ? nextBattle.creator_2_handle : nextBattle.creator_1_handle}
+                      </Text>
+                    </View>
                   </>
                 ) : (
-                  <>
-                    <Text style={styles.battleStatus}>Your monthly battle is not scheduled</Text>
-                    <TouchableOpacity style={styles.scheduleButton}>
-                      <LinearGradient
-                        colors={colors.gradientPurple}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 0 }}
-                        style={styles.scheduleButtonGradient}
-                      >
-                        <Text style={styles.scheduleButtonText}>Schedule Battle</Text>
-                      </LinearGradient>
-                    </TouchableOpacity>
-                  </>
+                  <Text style={styles.noBattlesText}>No upcoming battles scheduled</Text>
                 )}
+                <TouchableOpacity style={styles.viewAllButton}>
+                  <Text style={styles.viewAllButtonText}>View All Battles</Text>
+                </TouchableOpacity>
               </View>
             </CardPressable>
 
-            {/* LEARNING HUB CARD */}
-            <CardPressable onPress={() => router.push('/(tabs)/learning-hub')}>
+            {/* LIVE ACTIVITY SUMMARY CARD */}
+            <CardPressable onPress={() => console.log('Live activity tapped')}>
               <View style={styles.card}>
                 <View style={styles.cardHeader}>
-                  <Text style={styles.cardEmoji}>📚</Text>
+                  <Text style={styles.cardEmoji}>📊</Text>
                   <View style={styles.cardHeaderText}>
-                    <Text style={styles.cardTitleLarge}>Learning Hub</Text>
-                    <Text style={styles.cardSubtitle}>Your education progress</Text>
+                    <Text style={styles.cardTitleLarge}>LIVE Activity Summary</Text>
+                    <Text style={styles.cardSubtitle}>Last 30 days</Text>
                   </View>
                 </View>
-                <View style={styles.learningRow}>
-                  <View style={styles.learningItem}>
-                    <Text style={styles.learningTitle}>21-Day Challenge</Text>
-                    <Text style={styles.learningProgress}>{challengeProgress}/21</Text>
-                    <View style={styles.miniProgressBar}>
-                      <View style={[styles.miniProgressFill, { width: `${(challengeProgress / 21) * 100}%` }]} />
-                    </View>
+                <View style={styles.statsGrid}>
+                  <View style={styles.statCapsule}>
+                    <Text style={styles.statCapsuleLabel}>LIVE Days</Text>
+                    <Text style={styles.statCapsuleValue}>{stats.liveDays}</Text>
                   </View>
-                  <View style={styles.learningItem}>
-                    <Text style={styles.learningTitle}>UR Education</Text>
-                    <Text style={styles.learningProgress}>{educationProgress}/5</Text>
-                    <View style={styles.miniProgressBar}>
-                      <View style={[styles.miniProgressFill, { width: `${(educationProgress / 5) * 100}%` }]} />
-                    </View>
+                  <View style={styles.statCapsule}>
+                    <Text style={styles.statCapsuleLabel}>LIVE Hours</Text>
+                    <Text style={styles.statCapsuleValue}>{stats.liveHours}</Text>
+                  </View>
+                  <View style={styles.statCapsule}>
+                    <Text style={styles.statCapsuleLabel}>Diamonds Today</Text>
+                    <Text style={styles.statCapsuleValue}>{stats.diamondsToday.toLocaleString()}</Text>
+                  </View>
+                  <View style={styles.statCapsule}>
+                    <Text style={styles.statCapsuleLabel}>Streak</Text>
+                    <Text style={styles.statCapsuleValue}>{stats.streak} Day{stats.streak !== 1 ? 's' : ''}</Text>
                   </View>
                 </View>
               </View>
             </CardPressable>
 
-            {/* MANAGER CARD */}
+            {/* MY MANAGER CARD */}
             <CardPressable onPress={() => console.log('Manager tapped')}>
               <View style={styles.card}>
                 <View style={styles.cardHeader}>
@@ -380,7 +399,7 @@ export default function HomeScreen() {
                   <Text style={styles.managerInfo}>Manager assigned</Text>
                 ) : (
                   <>
-                    <Text style={styles.noManagerText}>No manager assigned yet</Text>
+                    <Text style={styles.noManagerText}>No manager assigned</Text>
                     <TouchableOpacity style={styles.requestButton}>
                       <LinearGradient
                         colors={colors.gradientPurple}
@@ -396,15 +415,29 @@ export default function HomeScreen() {
               </View>
             </CardPressable>
 
-            {/* SHOP CARD */}
-            <CardPressable onPress={() => router.push('/(tabs)/shop')}>
+            {/* TOOLS & PROMOTE CARD */}
+            <CardPressable onPress={() => console.log('Tools tapped')}>
               <View style={styles.card}>
                 <View style={styles.cardHeader}>
-                  <Text style={styles.cardEmoji}>🛍️</Text>
+                  <Text style={styles.cardEmoji}>🛠</Text>
                   <View style={styles.cardHeaderText}>
-                    <Text style={styles.cardTitleLarge}>JAXE Shop</Text>
-                    <Text style={styles.cardSubtitle}>Coming soon to your region</Text>
+                    <Text style={styles.cardTitleLarge}>Tools & Promote</Text>
+                    <Text style={styles.cardSubtitle}>Grow your presence</Text>
                   </View>
+                </View>
+                <View style={styles.toolsGrid}>
+                  <TouchableOpacity style={styles.toolButton} onPress={() => console.log('Promote tapped')}>
+                    <Text style={styles.toolIcon}>📢</Text>
+                    <Text style={styles.toolLabel}>Promote Myself</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.toolButton} onPress={() => router.push('/(tabs)/battles')}>
+                    <Text style={styles.toolIcon}>⚔️</Text>
+                    <Text style={styles.toolLabel}>Battles</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.toolButton} onPress={() => router.push('/(tabs)/ai-flyers')}>
+                    <Text style={styles.toolIcon}>🎨</Text>
+                    <Text style={styles.toolLabel}>Flyer AI</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
             </CardPressable>
@@ -420,7 +453,7 @@ function CardPressable({ children, onPress }: { children: React.ReactNode; onPre
 
   const handlePressIn = () => {
     Animated.spring(scaleAnim, {
-      toValue: 0.98,
+      toValue: 0.97,
       useNativeDriver: true,
     }).start();
   };
@@ -587,82 +620,35 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
   },
-  statsRow: {
+  graduationStats: {
     flexDirection: 'row',
-    gap: 12,
+    justifyContent: 'space-between',
+    marginTop: 8,
   },
-  statBox: {
-    flex: 1,
-    backgroundColor: colors.grey,
-    borderRadius: 20,
-    padding: 20,
-    alignItems: 'center',
-  },
-  statNumber: {
-    fontSize: 32,
-    fontFamily: 'Poppins_700Bold',
-    color: colors.text,
-    marginBottom: 4,
-  },
-  statLabel: {
+  graduationLabel: {
     fontSize: 13,
     fontFamily: 'Poppins_500Medium',
     color: colors.textSecondary,
   },
-  contestInfo: {
-    fontSize: 14,
-    fontFamily: 'Poppins_400Regular',
-    color: colors.textSecondary,
-    textAlign: 'center',
-    marginTop: 12,
-  },
-  battleStatus: {
-    fontSize: 16,
-    fontFamily: 'Poppins_500Medium',
-    color: colors.textSecondary,
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  battleScheduled: {
-    fontSize: 16,
-    fontFamily: 'Poppins_600SemiBold',
-    color: colors.text,
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  battleOpponent: {
-    fontSize: 14,
-    fontFamily: 'Poppins_500Medium',
-    color: colors.primary,
-    textAlign: 'center',
-  },
-  scheduleButton: {
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  scheduleButtonGradient: {
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  scheduleButtonText: {
-    fontSize: 16,
-    fontFamily: 'Poppins_600SemiBold',
-    color: '#FFFFFF',
-  },
-  learningRow: {
-    flexDirection: 'row',
+  missionsGrid: {
     gap: 12,
   },
-  learningItem: {
-    flex: 1,
+  missionBox: {
+    backgroundColor: colors.grey,
+    borderRadius: 20,
+    padding: 16,
   },
-  learningTitle: {
+  missionIcon: {
+    fontSize: 24,
+    marginBottom: 8,
+  },
+  missionTitle: {
     fontSize: 14,
     fontFamily: 'Poppins_600SemiBold',
     color: colors.text,
-    marginBottom: 6,
+    marginBottom: 4,
   },
-  learningProgress: {
+  missionProgress: {
     fontSize: 20,
     fontFamily: 'Poppins_700Bold',
     color: colors.primary,
@@ -670,14 +656,93 @@ const styles = StyleSheet.create({
   },
   miniProgressBar: {
     height: 6,
-    backgroundColor: colors.grey,
+    backgroundColor: colors.background,
     borderRadius: 6,
     overflow: 'hidden',
+    marginBottom: 4,
   },
   miniProgressFill: {
     height: '100%',
     backgroundColor: colors.primary,
     borderRadius: 6,
+  },
+  missionSubtext: {
+    fontSize: 11,
+    fontFamily: 'Poppins_400Regular',
+    color: colors.textSecondary,
+    marginTop: 4,
+  },
+  statusPill: {
+    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+    marginTop: 4,
+  },
+  statusPillText: {
+    fontSize: 11,
+    fontFamily: 'Poppins_600SemiBold',
+    color: '#22C55E',
+  },
+  battleItem: {
+    backgroundColor: colors.grey,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+  },
+  battleDate: {
+    fontSize: 14,
+    fontFamily: 'Poppins_600SemiBold',
+    color: colors.text,
+    marginBottom: 4,
+  },
+  battleOpponent: {
+    fontSize: 13,
+    fontFamily: 'Poppins_500Medium',
+    color: colors.primary,
+  },
+  noBattlesText: {
+    fontSize: 14,
+    fontFamily: 'Poppins_400Regular',
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  viewAllButton: {
+    backgroundColor: colors.grey,
+    borderRadius: 16,
+    padding: 14,
+    alignItems: 'center',
+  },
+  viewAllButtonText: {
+    fontSize: 14,
+    fontFamily: 'Poppins_600SemiBold',
+    color: colors.primary,
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  statCapsule: {
+    flex: 1,
+    minWidth: '45%',
+    backgroundColor: colors.grey,
+    borderRadius: 16,
+    padding: 16,
+    alignItems: 'center',
+  },
+  statCapsuleLabel: {
+    fontSize: 12,
+    fontFamily: 'Poppins_500Medium',
+    color: colors.textSecondary,
+    marginBottom: 4,
+  },
+  statCapsuleValue: {
+    fontSize: 20,
+    fontFamily: 'Poppins_700Bold',
+    color: colors.text,
   },
   managerInfo: {
     fontSize: 16,
@@ -704,5 +769,26 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Poppins_600SemiBold',
     color: '#FFFFFF',
+  },
+  toolsGrid: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  toolButton: {
+    flex: 1,
+    backgroundColor: colors.grey,
+    borderRadius: 16,
+    padding: 16,
+    alignItems: 'center',
+  },
+  toolIcon: {
+    fontSize: 28,
+    marginBottom: 8,
+  },
+  toolLabel: {
+    fontSize: 12,
+    fontFamily: 'Poppins_600SemiBold',
+    color: colors.text,
+    textAlign: 'center',
   },
 });

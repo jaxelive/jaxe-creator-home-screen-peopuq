@@ -11,6 +11,7 @@ export interface CreatorData {
   profile_picture_url: string | null;
   avatar_url: string | null;
   region: string | null;
+  language: string | null;
   creator_type: string[] | null;
   diamonds_monthly: number;
   total_diamonds: number;
@@ -39,31 +40,28 @@ export interface CreatorStats {
   currentStatus: string;
 }
 
-export function useCreatorData(creatorHandle?: string) {
+export function useCreatorData(creatorHandle: string = 'avelezsanti') {
   const [creator, setCreator] = useState<CreatorData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchCreatorData = useCallback(async () => {
     try {
-      console.log('[useCreatorData] Starting fetch...', { creatorHandle });
+      console.log('[useCreatorData] Starting fetch for creator:', creatorHandle);
       setLoading(true);
       setError(null);
 
       // Build the query
-      let query = supabase
+      const query = supabase
         .from('creators')
         .select('*')
-        .eq('is_active', true);
-
-      if (creatorHandle) {
-        console.log('[useCreatorData] Filtering by creator_handle:', creatorHandle);
-        query = query.eq('creator_handle', creatorHandle);
-      }
+        .eq('is_active', true)
+        .eq('creator_handle', creatorHandle)
+        .limit(1);
 
       // Execute the query
       console.log('[useCreatorData] Executing query...');
-      const { data, error: fetchError } = await query.limit(1);
+      const { data, error: fetchError } = await query;
 
       console.log('[useCreatorData] Query completed', {
         hasData: !!data,
@@ -86,13 +84,15 @@ export function useCreatorData(creatorHandle?: string) {
           handle: creatorData.creator_handle,
           name: `${creatorData.first_name} ${creatorData.last_name}`,
           diamonds: creatorData.total_diamonds,
-          monthlyDiamonds: creatorData.diamonds_monthly
+          monthlyDiamonds: creatorData.diamonds_monthly,
+          liveDays: creatorData.live_days_30d,
+          liveHours: Math.floor(creatorData.live_duration_seconds_30d / 3600)
         });
         setCreator(creatorData);
         setError(null);
       } else {
-        console.warn('[useCreatorData] No creator data found');
-        setError('No creator data found');
+        console.warn('[useCreatorData] No creator data found for handle:', creatorHandle);
+        setError(`No creator data found for @${creatorHandle}`);
         setCreator(null);
       }
     } catch (err: any) {
@@ -106,7 +106,7 @@ export function useCreatorData(creatorHandle?: string) {
   }, [creatorHandle]);
 
   useEffect(() => {
-    console.log('[useCreatorData] Effect triggered');
+    console.log('[useCreatorData] Effect triggered for handle:', creatorHandle);
     fetchCreatorData();
   }, [fetchCreatorData]);
 
@@ -130,8 +130,8 @@ export function useCreatorData(creatorHandle?: string) {
 
     const remaining = Math.max(0, targetAmount - creator.total_diamonds);
     const currentProgress = targetAmount > 0 
-      ? ((creator.total_diamonds / targetAmount) * 100).toFixed(1)
-      : '0.0';
+      ? ((creator.total_diamonds / targetAmount) * 100)
+      : 0;
 
     const stats = {
       monthlyDiamonds: creator.diamonds_monthly || 0,
@@ -140,7 +140,7 @@ export function useCreatorData(creatorHandle?: string) {
       liveHours: liveHours,
       diamondsToday: creator.diamonds_30d || 0,
       streak: creator.live_days_30d || 0,
-      currentProgress: parseFloat(currentProgress),
+      currentProgress: currentProgress,
       remaining: remaining,
       nextTarget: nextTarget,
       targetAmount: targetAmount,
