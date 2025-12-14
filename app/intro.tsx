@@ -4,12 +4,10 @@ import { View, Text, StyleSheet, Animated, Dimensions } from 'react-native';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors } from '@/styles/commonStyles';
-import { useSupabase } from '@/contexts/SupabaseContext';
 
 const { width, height } = Dimensions.get('window');
 
 export default function IntroScreen() {
-  const { session } = useSupabase();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.8)).current;
   const astronautAnim = useRef(new Animated.Value(0)).current;
@@ -44,17 +42,14 @@ export default function IntroScreen() {
       ),
     ]).start();
 
-    // Navigate after 5 seconds
+    // Navigate after 3 seconds - ALWAYS go to home (login disabled for now)
     const timer = setTimeout(() => {
-      if (session) {
-        router.replace('/(tabs)/(home)/');
-      } else {
-        router.replace('/login');
-      }
-    }, 5000);
+      console.log('[IntroScreen] Navigating to home (login disabled)');
+      router.replace('/(tabs)/(home)/');
+    }, 3000);
 
     return () => clearTimeout(timer);
-  }, [session]);
+  }, []);
 
   const astronautTranslateY = astronautAnim.interpolate({
     inputRange: [0, 1],
@@ -101,6 +96,7 @@ export default function IntroScreen() {
         
         <View style={styles.taglineContainer}>
           <Text style={styles.tagline}>Level up your creator journey.</Text>
+          <Text style={styles.devNote}>Testing with @avelezsanti</Text>
         </View>
       </Animated.View>
     </LinearGradient>
@@ -141,6 +137,7 @@ const styles = StyleSheet.create({
   },
   taglineContainer: {
     paddingHorizontal: 40,
+    alignItems: 'center',
   },
   tagline: {
     fontSize: 18,
@@ -148,5 +145,13 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
     letterSpacing: 0.5,
+    marginBottom: 8,
+  },
+  devNote: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.primary,
+    textAlign: 'center',
+    opacity: 0.7,
   },
 });
