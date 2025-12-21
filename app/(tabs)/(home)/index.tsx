@@ -245,7 +245,7 @@ export default function HomeScreen() {
                 <RotatingCard
                   type="bonus"
                   isFaded={true}
-                  onPress={() => router.push('/(tabs)/bonuses')}
+                  onPress={() => router.push('/(tabs)/bonus-details')}
                   data={{
                     bonusAmount: 100,
                     nextBonus: 175,
@@ -391,7 +391,7 @@ export default function HomeScreen() {
             </CardPressable>
 
             {/* ASSIGNED MANAGER CARD */}
-            <CardPressable onPress={() => console.log('Manager tapped')}>
+            <CardPressable onPress={() => router.push('/(tabs)/manager-details')}>
               <View style={styles.darkCard}>
                 <View style={styles.managerContent}>
                   <View style={styles.managerLeft}>
@@ -405,10 +405,10 @@ export default function HomeScreen() {
                     <Text style={styles.managerLabel}>ASSIGNED MANAGER</Text>
                     <Text style={styles.managerName}>Michael Chen</Text>
                   </View>
-                  <TouchableOpacity style={styles.emailButton}>
+                  <TouchableOpacity style={styles.viewManagerButton} onPress={() => router.push('/(tabs)/manager-details')}>
                     <IconSymbol 
-                      ios_icon_name="envelope.fill" 
-                      android_material_icon_name="email" 
+                      ios_icon_name="person.circle.fill" 
+                      android_material_icon_name="account-circle" 
                       size={20} 
                       color="#FFFFFF" 
                     />
@@ -422,15 +422,9 @@ export default function HomeScreen() {
               <View style={styles.darkCard}>
                 <View style={styles.battleHeader}>
                   <Text style={styles.battleTitle}>VS Battle</Text>
-                  <View style={styles.battlePointsContainer}>
-                    <IconSymbol 
-                      ios_icon_name="trophy.fill" 
-                      android_material_icon_name="emoji-events" 
-                      size={16} 
-                      color="#6642EF" 
-                    />
-                    <Text style={styles.battlePoints}>7,390</Text>
-                  </View>
+                  <TouchableOpacity style={styles.manageButton} onPress={() => router.push('/(tabs)/battles')}>
+                    <Text style={styles.manageButtonText}>Manage</Text>
+                  </TouchableOpacity>
                 </View>
                 <Text style={styles.battleSubtitle}>Monetto Airlines</Text>
 
@@ -466,6 +460,66 @@ export default function HomeScreen() {
                     <Text style={styles.battlePlayerStats}>••••• 1001</Text>
                   </View>
                 </View>
+              </View>
+            </CardPressable>
+
+            {/* AI FLYER CARD */}
+            <CardPressable onPress={() => router.push('/(tabs)/ai-flyers')}>
+              <View style={styles.darkCard}>
+                <View style={styles.flyerHeader}>
+                  <View style={styles.flyerHeaderLeft}>
+                    <IconSymbol 
+                      ios_icon_name="wand.and.stars" 
+                      android_material_icon_name="auto-awesome" 
+                      size={28} 
+                      color="#6642EF" 
+                    />
+                    <View>
+                      <Text style={styles.flyerTitle}>AI Flyer Creator</Text>
+                      <Text style={styles.flyerSubtitle}>Create stunning promotional flyers</Text>
+                    </View>
+                  </View>
+                </View>
+
+                <View style={styles.flyerFeatures}>
+                  <View style={styles.flyerFeature}>
+                    <IconSymbol 
+                      ios_icon_name="sparkles" 
+                      android_material_icon_name="auto-awesome" 
+                      size={16} 
+                      color="#A0A0A0" 
+                    />
+                    <Text style={styles.flyerFeatureText}>AI-Powered Design</Text>
+                  </View>
+                  <View style={styles.flyerFeature}>
+                    <IconSymbol 
+                      ios_icon_name="photo" 
+                      android_material_icon_name="image" 
+                      size={16} 
+                      color="#A0A0A0" 
+                    />
+                    <Text style={styles.flyerFeatureText}>Multiple Templates</Text>
+                  </View>
+                  <View style={styles.flyerFeature}>
+                    <IconSymbol 
+                      ios_icon_name="square.and.arrow.up" 
+                      android_material_icon_name="share" 
+                      size={16} 
+                      color="#A0A0A0" 
+                    />
+                    <Text style={styles.flyerFeatureText}>Easy Sharing</Text>
+                  </View>
+                </View>
+
+                <TouchableOpacity style={styles.createFlyerButton}>
+                  <Text style={styles.createFlyerButtonText}>Create Flyer</Text>
+                  <IconSymbol 
+                    ios_icon_name="arrow.right" 
+                    android_material_icon_name="arrow-forward" 
+                    size={18} 
+                    color="#1A1A1A" 
+                  />
+                </TouchableOpacity>
               </View>
             </CardPressable>
 
@@ -893,7 +947,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_700Bold',
     color: '#FFFFFF',
   },
-  emailButton: {
+  viewManagerButton: {
     width: 44,
     height: 44,
     borderRadius: 22,
@@ -914,15 +968,16 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_700Bold',
     color: '#FFFFFF',
   },
-  battlePointsContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
+  manageButton: {
+    backgroundColor: '#6642EF',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 12,
   },
-  battlePoints: {
-    fontSize: 14,
+  manageButtonText: {
+    fontSize: 13,
     fontFamily: 'Poppins_700Bold',
-    color: '#6642EF',
+    color: '#FFFFFF',
   },
   battleSubtitle: {
     fontSize: 13,
@@ -997,5 +1052,58 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_600SemiBold',
     color: '#A0A0A0',
     letterSpacing: 0.5,
+  },
+
+  // AI FLYER CARD
+  flyerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 20,
+  },
+  flyerHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  flyerTitle: {
+    fontSize: 18,
+    fontFamily: 'Poppins_700Bold',
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  flyerSubtitle: {
+    fontSize: 13,
+    fontFamily: 'Poppins_400Regular',
+    color: '#A0A0A0',
+  },
+  flyerFeatures: {
+    gap: 12,
+    marginBottom: 20,
+  },
+  flyerFeature: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  flyerFeatureText: {
+    fontSize: 14,
+    fontFamily: 'Poppins_500Medium',
+    color: '#A0A0A0',
+  },
+  createFlyerButton: {
+    backgroundColor: '#2A2A2A',
+    borderRadius: 16,
+    padding: 16,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+  },
+  createFlyerButtonText: {
+    fontSize: 15,
+    fontFamily: 'Poppins_600SemiBold',
+    color: '#FFFFFF',
   },
 });

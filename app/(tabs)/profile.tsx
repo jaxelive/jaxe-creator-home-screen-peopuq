@@ -25,13 +25,15 @@ export default function ProfileScreen() {
 
   // Editable fields
   const [email, setEmail] = useState('');
-  const [bio, setBio] = useState('');
+  const [language, setLanguage] = useState('');
+  const [paypalEmail, setPaypalEmail] = useState('');
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
 
   useEffect(() => {
     if (creator) {
       setEmail(creator.email || '');
-      setBio(''); // Bio field doesn't exist in current schema, but we'll keep it for future use
+      setLanguage(creator.language || 'English');
+      setPaypalEmail(creator.paypal_email || '');
       setProfilePicture(creator.profile_picture_url || creator.avatar_url || null);
     }
   }, [creator]);
@@ -63,6 +65,8 @@ export default function ProfileScreen() {
     try {
       const updates: any = {
         email,
+        language,
+        paypal_email: paypalEmail,
       };
 
       // Only update profile picture if it changed
@@ -132,7 +136,8 @@ export default function ProfileScreen() {
                 if (isEditing) {
                   // Cancel editing
                   setEmail(creator.email || '');
-                  setBio('');
+                  setLanguage(creator.language || 'English');
+                  setPaypalEmail(creator.paypal_email || '');
                   setProfilePicture(creator.profile_picture_url || creator.avatar_url || null);
                   setIsEditing(false);
                 } else {
@@ -202,19 +207,33 @@ export default function ProfileScreen() {
             )}
           </View>
           <View style={styles.fieldContainer}>
-            <Text style={styles.fieldLabel}>Bio</Text>
+            <Text style={styles.fieldLabel}>Language</Text>
             {isEditing ? (
               <TextInput
-                style={[styles.input, styles.textArea]}
-                value={bio}
-                onChangeText={setBio}
-                placeholder="Tell us about yourself"
+                style={styles.input}
+                value={language}
+                onChangeText={setLanguage}
+                placeholder="e.g., English, Spanish"
                 placeholderTextColor={colors.textSecondary}
-                multiline
-                numberOfLines={4}
               />
             ) : (
-              <Text style={styles.fieldValue}>{bio || 'No bio yet'}</Text>
+              <Text style={styles.fieldValue}>{language || 'Not set'}</Text>
+            )}
+          </View>
+          <View style={styles.fieldContainer}>
+            <Text style={styles.fieldLabel}>PayPal Email</Text>
+            {isEditing ? (
+              <TextInput
+                style={styles.input}
+                value={paypalEmail}
+                onChangeText={setPaypalEmail}
+                placeholder="Enter your PayPal email"
+                placeholderTextColor={colors.textSecondary}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+            ) : (
+              <Text style={styles.fieldValue}>{paypalEmail || 'Not set'}</Text>
             )}
           </View>
         </View>

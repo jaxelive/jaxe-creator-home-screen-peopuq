@@ -8,19 +8,19 @@ export default function TabLayout() {
     {
       name: '(home)',
       route: '/(tabs)/(home)/',
-      icon: 'home',
+      icon: 'house.fill',
       label: 'Home',
     },
     {
       name: 'missions',
       route: '/(tabs)/missions',
-      icon: 'grid-view',
+      icon: 'square.grid.3x3.fill',
       label: 'Tools',
     },
     {
       name: 'profile',
       route: '/(tabs)/profile',
-      icon: 'settings',
+      icon: 'gearshape.fill',
       label: 'Settings',
     },
   ];
@@ -38,9 +38,12 @@ export default function TabLayout() {
         <Stack.Screen key="live" name="live" />
         <Stack.Screen key="rewards" name="rewards" />
         <Stack.Screen key="bonuses" name="bonuses" />
+        <Stack.Screen key="bonus-details" name="bonus-details" />
         <Stack.Screen key="battles" name="battles" />
         <Stack.Screen key="ai-flyers" name="ai-flyers" />
         <Stack.Screen key="learning-hub" name="learning-hub" />
+        <Stack.Screen key="challenge-day-details" name="challenge-day-details" />
+        <Stack.Screen key="manager-details" name="manager-details" />
         <Stack.Screen key="shop" name="shop" />
         <Stack.Screen key="profile" name="profile" />
       </Stack>

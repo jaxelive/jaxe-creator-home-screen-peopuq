@@ -248,6 +248,8 @@ export function RotatingCard({ type, isFaded = false, onPress, data }: RotatingC
   );
 }
 
+export default RotatingCard;
+
 const styles = StyleSheet.create({
   card: {
     backgroundColor: '#6642EF',

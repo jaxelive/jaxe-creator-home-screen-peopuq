@@ -29,56 +29,54 @@ export default function FloatingTabBar({ tabs }: FloatingTabBarProps) {
     return pathname.startsWith(route);
   };
 
+  const activeIndex = tabs.findIndex(tab => isActive(tab.route));
+
   return (
     <View style={[styles.container, { paddingBottom: insets.bottom + 8 }]}>
-      <BlurView intensity={80} tint="light" style={styles.blurContainer}>
+      <View style={styles.tabBarContainer}>
         <View style={styles.tabBar}>
+          {/* Sliding Background Indicator */}
+          {activeIndex >= 0 && (
+            <View
+              style={[
+                styles.activeIndicator,
+                {
+                  left: `${(activeIndex / tabs.length) * 100}%`,
+                  width: `${100 / tabs.length}%`,
+                },
+              ]}
+            />
+          )}
+
           {tabs.map((tab, index) => {
             const active = isActive(tab.route);
-            const isHomeTab = tab.name === '(home)';
             
             return (
               <TouchableOpacity
                 key={index}
-                style={[
-                  styles.tab,
-                  isHomeTab && styles.homeTab,
-                ]}
+                style={styles.tab}
                 onPress={() => router.push(tab.route as any)}
                 activeOpacity={0.7}
               >
-                {isHomeTab ? (
-                  <View style={styles.homeIconContainer}>
-                    <IconSymbol
-                      ios_icon_name="house.fill"
-                      android_material_icon_name={tab.icon}
-                      size={28}
-                      color={active ? colors.primary : colors.text}
-                    />
-                  </View>
-                ) : (
-                  <>
-                    <IconSymbol
-                      ios_icon_name={tab.icon}
-                      android_material_icon_name={tab.icon}
-                      size={24}
-                      color={active ? colors.primary : colors.textSecondary}
-                    />
-                    <Text
-                      style={[
-                        styles.label,
-                        active && styles.labelActive,
-                      ]}
-                    >
-                      {tab.label}
-                    </Text>
-                  </>
-                )}
+                <IconSymbol
+                  ios_icon_name={tab.icon}
+                  android_material_icon_name={tab.icon}
+                  size={24}
+                  color={active ? '#6642EF' : colors.text}
+                />
+                <Text
+                  style={[
+                    styles.label,
+                    active && styles.labelActive,
+                  ]}
+                >
+                  {tab.label}
+                </Text>
               </TouchableOpacity>
             );
           })}
         </View>
-      </BlurView>
+      </View>
     </View>
   );
 }
@@ -92,11 +90,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 8,
   },
-  blurContainer: {
+  tabBarContainer: {
+    backgroundColor: colors.backgroundAlt,
     borderRadius: 28,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(139, 92, 246, 0.1)',
+    borderColor: colors.border,
   },
   tabBar: {
     flexDirection: 'row',
@@ -104,37 +103,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
     paddingHorizontal: 8,
-    backgroundColor: Platform.OS === 'android' ? 'rgba(255, 255, 255, 0.95)' : 'transparent',
+    position: 'relative',
+  },
+  activeIndicator: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    backgroundColor: '#6642EF',
+    borderRadius: 24,
+    marginVertical: 4,
+    marginHorizontal: 4,
+    opacity: 0.15,
   },
   tab: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 8,
-  },
-  homeTab: {
-    flex: 1.2,
-  },
-  homeIconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.backgroundAlt,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 8,
+    zIndex: 1,
   },
   label: {
     fontSize: 11,
     fontWeight: '600',
-    color: colors.textSecondary,
+    color: colors.text,
     marginTop: 4,
   },
   labelActive: {
-    color: colors.primary,
+    color: '#6642EF',
   },
 });
