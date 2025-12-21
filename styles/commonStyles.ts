@@ -1,12 +1,12 @@
 
 import { StyleSheet, ViewStyle, TextStyle } from 'react-native';
 
-// Dark theme color palette inspired by the design
+// Dark theme color palette - FLAT COLORS ONLY (NO GRADIENTS)
 export const colors = {
-  // Primary gradient colors - purple/violet blend
-  primary: '#8B5CF6',           // Vibrant purple
-  primaryLight: '#A78BFA',      // Light purple
-  primaryDark: '#7C3AED',       // Deep purple
+  // Primary color - flat purple
+  primary: '#6642EF',           // Primary purple (flat)
+  primaryLight: '#8B5CF6',      // Light purple
+  primaryDark: '#5B34D1',       // Deep purple
   
   // Accent colors
   accent: '#EC4899',            // Pink accent
@@ -46,13 +46,13 @@ export const colors = {
   shadow: 'rgba(0, 0, 0, 0.5)', // Dark shadow
   overlay: 'rgba(0, 0, 0, 0.7)', // Dark overlay
   
-  // Gradient colors for cards
-  gradientPurple: ['#8B5CF6', '#A78BFA'],
-  gradientPink: ['#EC4899', '#F9A8D4'],
-  gradientCyan: ['#06B6D4', '#67E8F9'],
-  gradientSunset: ['#F59E0B', '#EC4899'],
-  gradientOcean: ['#06B6D4', '#8B5CF6'],
-  gradientDark: ['#1F1F1F', '#2A2A2A'],
+  // Gradient colors for cards (kept for backwards compatibility but should use flat colors)
+  gradientPurple: ['#6642EF', '#6642EF'],
+  gradientPink: ['#EC4899', '#EC4899'],
+  gradientCyan: ['#06B6D4', '#06B6D4'],
+  gradientSunset: ['#F59E0B', '#F59E0B'],
+  gradientOcean: ['#06B6D4', '#06B6D4'],
+  gradientDark: ['#1F1F1F', '#1F1F1F'],
 };
 
 export const buttonStyles = StyleSheet.create({

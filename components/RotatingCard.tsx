@@ -166,6 +166,16 @@ export function RotatingCard({ type, isFaded = false, onPress, data }: RotatingC
               </View>
             </View>
           </View>
+
+          {/* Details Icon */}
+          <TouchableOpacity style={styles.detailsIcon} onPress={onPress}>
+            <IconSymbol 
+              ios_icon_name="info.circle.fill" 
+              android_material_icon_name="info" 
+              size={24} 
+              color="rgba(255, 255, 255, 0.8)" 
+            />
+          </TouchableOpacity>
         </Animated.View>
       </TouchableOpacity>
     );
@@ -223,6 +233,16 @@ export function RotatingCard({ type, isFaded = false, onPress, data }: RotatingC
             <Text style={styles.goalValueHighlight}>{data.nextTier || 'Silver'}</Text>
           </View>
         </View>
+
+        {/* Details Icon */}
+        <TouchableOpacity style={styles.detailsIcon} onPress={onPress}>
+          <IconSymbol 
+            ios_icon_name="info.circle.fill" 
+            android_material_icon_name="info" 
+            size={24} 
+            color="rgba(255, 255, 255, 0.8)" 
+          />
+        </TouchableOpacity>
       </Animated.View>
     </TouchableOpacity>
   );
@@ -230,10 +250,11 @@ export function RotatingCard({ type, isFaded = false, onPress, data }: RotatingC
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#7C3AED',
+    backgroundColor: '#6642EF',
     borderRadius: 24,
     padding: 24,
     width: '100%',
+    minHeight: 420,
   },
 
   // Bonus Card Styles
@@ -465,5 +486,14 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontFamily: 'Poppins_700Bold',
     color: '#FCD34D',
+  },
+  detailsIcon: {
+    position: 'absolute',
+    top: 24,
+    right: 24,
+    width: 32,
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

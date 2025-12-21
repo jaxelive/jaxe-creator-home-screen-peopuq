@@ -12,7 +12,6 @@ import {
   Dimensions,
   ActivityIndicator,
 } from "react-native";
-import { LinearGradient } from 'expo-linear-gradient';
 import { colors } from "@/styles/commonStyles";
 import { IconSymbol } from "@/components/IconSymbol";
 import { HeaderRightButton, HeaderLeftButton } from "@/components/HeaderButtons";
@@ -159,23 +158,18 @@ export default function HomeScreen() {
             {error || 'No creator data found'}
           </Text>
           <TouchableOpacity style={styles.retryButton} onPress={refetch}>
-            <LinearGradient
-              colors={colors.gradientPurple}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.retryButtonGradient}
-            >
+            <View style={styles.retryButtonFlat}>
               <Text style={styles.retryButtonText}>Try Again</Text>
-            </LinearGradient>
+            </View>
           </TouchableOpacity>
         </View>
       </>
     );
   }
 
-  const fullName = `${creator.first_name} ${creator.last_name}`.trim() || creator.creator_handle;
+  const firstName = creator.first_name || creator.creator_handle;
   const profileImageUrl = creator.avatar_url || creator.profile_picture_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop';
-  const region = creator.region || 'USA';
+  const region = creator.region || 'Latin America';
   const creatorType = creator.creator_type?.[0] || 'Creator';
 
   // Calculate requirements progress
@@ -208,13 +202,10 @@ export default function HomeScreen() {
                   style={styles.headerAvatar}
                 />
                 <View style={styles.headerInfo}>
-                  <Text style={styles.headerGreeting}>Welcome back,</Text>
                   <View style={styles.headerNameRow}>
-                    <Text style={styles.headerName}>{fullName} </Text>
-                    <Text style={styles.headerEmoji}>⭐ </Text>
-                    <View style={styles.goldBadge}>
-                      <Text style={styles.goldBadgeText}>GOLD</Text>
-                    </View>
+                    <Text style={styles.headerGreeting}>Welcome back, </Text>
+                    <Text style={styles.headerName}>{firstName}</Text>
+                    <Text style={styles.goldCheckmark}> ⭐</Text>
                   </View>
                   <View style={styles.headerBadges}>
                     <View style={styles.headerBadge}>
@@ -229,12 +220,15 @@ export default function HomeScreen() {
                       <Text style={styles.regionBadgeText}>{region}</Text>
                     </View>
                     <View style={styles.regionBadge}>
-                      <Text style={styles.regionBadgeText}>Canada</Text>
+                      <Text style={styles.regionBadgeText}>Creator</Text>
                     </View>
                   </View>
                 </View>
               </View>
-              <TouchableOpacity style={styles.headerIconButton}>
+              <TouchableOpacity 
+                style={styles.headerIconButton}
+                onPress={() => console.log('Open JAXE Agent chat')}
+              >
                 <IconSymbol 
                   ios_icon_name="message.fill" 
                   android_material_icon_name="chat-bubble" 
@@ -246,32 +240,32 @@ export default function HomeScreen() {
 
             {/* ROTATING CARDS SECTION */}
             <View style={styles.rotatingCardsContainer}>
-              {/* Back Card (Faded) */}
+              {/* Back Card (Faded) - Bonus Forecast */}
               <View style={styles.backCard}>
                 <RotatingCard
-                  type="diamonds"
-                  isFaded={true}
-                  onPress={() => console.log('Diamonds card tapped')}
-                  data={{
-                    diamondsEarned: 15000,
-                    totalGoal: 200000,
-                    remaining: 185000,
-                    nextTier: 'Silver',
-                  }}
-                />
-              </View>
-
-              {/* Front Card */}
-              <View style={styles.frontCard}>
-                <RotatingCard
                   type="bonus"
-                  onPress={() => console.log('Bonus card tapped')}
+                  isFaded={true}
+                  onPress={() => router.push('/(tabs)/bonuses')}
                   data={{
                     bonusAmount: 100,
                     nextBonus: 175,
                     liveDays: stats.liveDays,
                     liveHours: stats.liveHours,
                     battlesBooked: 1,
+                  }}
+                />
+              </View>
+
+              {/* Front Card - Diamonds */}
+              <View style={styles.frontCard}>
+                <RotatingCard
+                  type="diamonds"
+                  onPress={() => console.log('Diamonds card tapped')}
+                  data={{
+                    diamondsEarned: stats.totalDiamonds,
+                    totalGoal: stats.targetAmount,
+                    remaining: stats.remaining,
+                    nextTier: stats.nextTarget,
                   }}
                 />
               </View>
@@ -433,7 +427,7 @@ export default function HomeScreen() {
                       ios_icon_name="trophy.fill" 
                       android_material_icon_name="emoji-events" 
                       size={16} 
-                      color="#8B5CF6" 
+                      color="#6642EF" 
                     />
                     <Text style={styles.battlePoints}>7,390</Text>
                   </View>
@@ -544,7 +538,8 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     overflow: 'hidden',
   },
-  retryButtonGradient: {
+  retryButtonFlat: {
+    backgroundColor: '#6642EF',
     paddingHorizontal: 32,
     paddingVertical: 14,
   },
@@ -558,7 +553,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingTop: 60,
+    paddingTop: 70,
     paddingHorizontal: 16,
     paddingBottom: 120,
   },
@@ -568,58 +563,47 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 20,
+    marginBottom: 32,
+    paddingTop: 8,
   },
   headerLeft: {
     flexDirection: 'row',
     flex: 1,
   },
   headerAvatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    marginRight: 12,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    marginRight: 14,
     borderWidth: 3,
-    borderColor: '#8B5CF6',
+    borderColor: '#6642EF',
   },
   headerInfo: {
     flex: 1,
   },
-  headerGreeting: {
-    fontSize: 14,
-    fontFamily: 'Poppins_400Regular',
-    color: '#FFFFFF',
-    marginBottom: 2,
-  },
   headerNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
+    flexWrap: 'wrap',
+  },
+  headerGreeting: {
+    fontSize: 22,
+    fontFamily: 'Poppins_400Regular',
+    color: '#FFFFFF',
   },
   headerName: {
-    fontSize: 18,
+    fontSize: 22,
     fontFamily: 'Poppins_700Bold',
     color: '#FFFFFF',
   },
-  headerEmoji: {
-    fontSize: 18,
-  },
-  goldBadge: {
-    backgroundColor: '#F59E0B',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
-  },
-  goldBadgeText: {
-    fontSize: 11,
-    fontFamily: 'Poppins_700Bold',
-    color: '#FFFFFF',
-    letterSpacing: 0.5,
+  goldCheckmark: {
+    fontSize: 22,
   },
   headerBadges: {
     flexDirection: 'row',
     gap: 6,
-    marginBottom: 6,
+    marginBottom: 8,
   },
   headerBadge: {
     backgroundColor: '#2A2A2A',
@@ -660,11 +644,11 @@ const styles = StyleSheet.create({
   rotatingCardsContainer: {
     position: 'relative',
     marginBottom: 16,
-    height: 520,
+    height: 480,
   },
   backCard: {
     position: 'absolute',
-    top: 12,
+    top: 200,
     left: 0,
     right: 0,
     zIndex: 1,
@@ -699,7 +683,7 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#8B5CF6',
+    backgroundColor: '#6642EF',
   },
   pendingText: {
     fontSize: 11,
@@ -712,15 +696,15 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: 24,
     borderWidth: 3,
-    borderColor: '#8B5CF6',
+    borderColor: '#6642EF',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(139, 92, 246, 0.1)',
+    backgroundColor: 'rgba(102, 66, 239, 0.1)',
   },
   circularProgressText: {
     fontSize: 12,
     fontFamily: 'Poppins_700Bold',
-    color: '#8B5CF6',
+    color: '#6642EF',
   },
   cardTitle: {
     fontSize: 20,
@@ -748,12 +732,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   challengeDayCompleted: {
-    backgroundColor: '#8B5CF6',
+    backgroundColor: '#6642EF',
   },
   challengeDayActive: {
-    backgroundColor: '#8B5CF6',
+    backgroundColor: '#6642EF',
     borderWidth: 3,
-    borderColor: 'rgba(139, 92, 246, 0.3)',
+    borderColor: 'rgba(102, 66, 239, 0.3)',
   },
   challengeDayLocked: {
     backgroundColor: '#2A2A2A',
@@ -790,7 +774,7 @@ const styles = StyleSheet.create({
 
   // ACADEMY CARD
   requiredBadge: {
-    backgroundColor: '#8B5CF6',
+    backgroundColor: '#6642EF',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
@@ -829,7 +813,7 @@ const styles = StyleSheet.create({
   },
   academyProgressFill: {
     height: '100%',
-    backgroundColor: '#8B5CF6',
+    backgroundColor: '#6642EF',
     borderRadius: 6,
   },
   quizStatus: {
@@ -846,7 +830,7 @@ const styles = StyleSheet.create({
   continueLink: {
     fontSize: 13,
     fontFamily: 'Poppins_700Bold',
-    color: '#8B5CF6',
+    color: '#6642EF',
   },
   academyRight: {
     width: 100,
@@ -938,7 +922,7 @@ const styles = StyleSheet.create({
   battlePoints: {
     fontSize: 14,
     fontFamily: 'Poppins_700Bold',
-    color: '#8B5CF6',
+    color: '#6642EF',
   },
   battleSubtitle: {
     fontSize: 13,
@@ -969,7 +953,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -4,
     right: -4,
-    backgroundColor: '#8B5CF6',
+    backgroundColor: '#6642EF',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 8,
