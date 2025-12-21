@@ -15,15 +15,34 @@ import {
 } from "react-native";
 import { colors } from "@/styles/commonStyles";
 import { IconSymbol } from "@/components/IconSymbol";
-import { HeaderRightButton, HeaderLeftButton } from "@/components/HeaderButtons";
 import { useCreatorData } from "@/hooks/useCreatorData";
 import { useFonts, Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold, Poppins_800ExtraBold } from '@expo-google-fonts/poppins';
 import { supabase } from "@/app/integrations/supabase/client";
 import { RotatingCard } from "@/components/RotatingCard";
 import { AnimatedNumber } from "@/components/AnimatedNumber";
 import { AnimatedProgressBar } from "@/components/AnimatedProgressBar";
+import { ChatDrawer } from "@/components/ChatDrawer";
 
 const { width } = Dimensions.get('window');
+
+// Tier calculation function
+function getTierFromDiamonds(diamonds: number): string {
+  if (diamonds >= 10000000) return "Diamond";
+  if (diamonds >= 5000000) return "Platinum";
+  if (diamonds >= 1000000) return "Gold";
+  if (diamonds >= 500000) return "Silver";
+  if (diamonds >= 100000) return "Bronze";
+  return "Rookie";
+}
+
+function getNextTierInfo(diamonds: number): { tier: string; target: number } {
+  if (diamonds < 100000) return { tier: "Bronze", target: 100000 };
+  if (diamonds < 500000) return { tier: "Silver", target: 500000 };
+  if (diamonds < 1000000) return { tier: "Gold", target: 1000000 };
+  if (diamonds < 5000000) return { tier: "Platinum", target: 5000000 };
+  if (diamonds < 10000000) return { tier: "Diamond", target: 10000000 };
+  return { tier: "Max", target: 10000000 };
+}
 
 export default function HomeScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -36,13 +55,13 @@ export default function HomeScreen() {
     Poppins_800ExtraBold,
   });
   
-  const { creator, loading, error, stats, refetch } = useCreatorData('avelezsanti');
+  const { creator, loading, error, refetch } = useCreatorData('avelezsanti');
   const [nextBattle, setNextBattle] = useState<any>(null);
-  const [challengeProgress, setChallengeProgress] = useState(7);
-  const [educationProgress, setEducationProgress] = useState(3);
-  const [bonusForecast, setBonusForecast] = useState(175);
+  const [challengeProgress, setChallengeProgress] = useState<any>(null);
+  const [educationProgress, setEducationProgress] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [activeCardIndex, setActiveCardIndex] = useState(0);
+  const [chatDrawerVisible, setChatDrawerVisible] = useState(false);
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -56,7 +75,8 @@ export default function HomeScreen() {
     setRefreshing(true);
     await refetch();
     await fetchBattleData();
-    await fetchLearningData();
+    await fetchChallengeData();
+    await fetchEducationData();
     setRefreshing(false);
   };
 
@@ -71,7 +91,8 @@ export default function HomeScreen() {
         liveHours: Math.floor(creator.live_duration_seconds_30d / 3600)
       });
       fetchBattleData();
-      fetchLearningData();
+      fetchChallengeData();
+      fetchEducationData();
     }
   }, [creator]);
 
@@ -98,45 +119,69 @@ export default function HomeScreen() {
         setNextBattle(data[0]);
       } else {
         console.log('[HomeScreen] No upcoming battles found');
+        setNextBattle(null);
       }
     } catch (error: any) {
       console.error('[HomeScreen] Unexpected error fetching battle data:', error);
     }
   };
 
-  const fetchLearningData = async () => {
+  const fetchChallengeData = async () => {
     if (!creator) return;
 
     try {
-      const { data: challengeData, error: challengeError } = await supabase
+      // Fetch user's challenge progress
+      const { data: progressData, error: progressError } = await supabase
         .from('user_day_progress')
         .select('*')
-        .eq('user_id', creator.id)
-        .eq('status', 'completed');
+        .eq('user_id', creator.id);
 
-      if (challengeError) {
-        console.error('[HomeScreen] Error fetching challenge data:', challengeError);
-      } else {
-        const completedDays = challengeData?.length || 0;
-        console.log('[HomeScreen] Challenge progress:', completedDays, '/21');
-        setChallengeProgress(completedDays);
+      if (progressError && progressError.code !== 'PGRST116') {
+        console.error('[HomeScreen] Error fetching challenge progress:', progressError);
+        return;
       }
 
+      const completedDays = progressData?.filter(p => p.status === 'completed').length || 0;
+      const currentDay = progressData?.find(p => p.status === 'unlocked')?.day_number || 1;
+      const todayStatus = progressData?.find(p => p.day_number === currentDay)?.status || 'locked';
+
+      console.log('[HomeScreen] Challenge progress:', {
+        completedDays,
+        currentDay,
+        todayStatus,
+      });
+
+      setChallengeProgress({
+        completedDays,
+        currentDay,
+        todayStatus,
+        totalDays: 21,
+      });
+    } catch (error: any) {
+      console.error('[HomeScreen] Unexpected error fetching challenge data:', error);
+    }
+  };
+
+  const fetchEducationData = async () => {
+    if (!creator) return;
+
+    try {
       const { data: educationData, error: educationError } = await supabase
         .from('user_video_progress')
         .select('*')
         .eq('user_id', creator.id)
         .eq('completed', true);
 
-      if (educationError) {
+      if (educationError && educationError.code !== 'PGRST116') {
         console.error('[HomeScreen] Error fetching education data:', educationError);
-      } else {
-        const completedVideos = educationData?.length || 0;
-        console.log('[HomeScreen] Education progress:', completedVideos, '/5');
-        setEducationProgress(completedVideos);
+        return;
       }
+
+      const completedVideos = educationData?.length || 0;
+      console.log('[HomeScreen] Education progress:', completedVideos, '/5');
+      setEducationProgress(completedVideos);
     } catch (error: any) {
-      console.error('[HomeScreen] Unexpected error fetching learning data:', error);
+      console.error('[HomeScreen] Unexpected error fetching education data:', error);
     }
   };
 
@@ -157,7 +202,7 @@ export default function HomeScreen() {
     );
   }
 
-  if (error || !creator || !stats) {
+  if (error || !creator) {
     return (
       <>
         <Stack.Screen
@@ -183,16 +228,22 @@ export default function HomeScreen() {
   const firstName = creator.first_name || creator.creator_handle;
   const profileImageUrl = creator.avatar_url || creator.profile_picture_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop';
   const region = creator.region || 'Latin America';
-  const creatorType = creator.creator_type?.[0] || 'Creator';
 
-  // Calculate requirements progress
-  const liveDaysProgress = Math.min((stats.liveDays / 5) * 100, 100);
-  const liveHoursProgress = Math.min((stats.liveHours / 10) * 100, 100);
-  const battlesProgress = 100; // Assuming 1/1 battles completed
-  const overallRequirements = Math.round((liveDaysProgress + liveHoursProgress + battlesProgress) / 3);
+  // Calculate tier and next tier from real data
+  const currentDiamonds = creator.diamonds_monthly || 0;
+  const currentTier = getTierFromDiamonds(currentDiamonds);
+  const nextTierInfo = getNextTierInfo(currentDiamonds);
+  const remaining = Math.max(0, nextTierInfo.target - currentDiamonds);
+  const progress = nextTierInfo.target > 0 ? (currentDiamonds / nextTierInfo.target) * 100 : 0;
+
+  // Calculate live stats
+  const liveDays = creator.live_days_30d || 0;
+  const liveHours = Math.floor((creator.live_duration_seconds_30d || 0) / 3600);
 
   // Calculate challenge progress percentage
-  const challengePercentage = (challengeProgress / 21) * 100;
+  const challengePercentage = challengeProgress 
+    ? (challengeProgress.completedDays / challengeProgress.totalDays) * 100 
+    : 0;
 
   return (
     <>
@@ -221,10 +272,26 @@ export default function HomeScreen() {
             {/* HEADER */}
             <View style={styles.header}>
               <View style={styles.headerLeft}>
-                <Image
-                  source={{ uri: profileImageUrl }}
-                  style={styles.headerAvatar}
-                />
+                <View style={styles.profileContainer}>
+                  <Image
+                    source={{ uri: profileImageUrl }}
+                    style={styles.headerAvatar}
+                  />
+                  {/* Notification Bell Overlay */}
+                  <TouchableOpacity 
+                    style={styles.notificationBellOverlay}
+                    onPress={() => router.push('/(tabs)/notifications' as any)}
+                  >
+                    <View style={styles.notificationBellBadge}>
+                      <IconSymbol 
+                        ios_icon_name="bell.fill" 
+                        android_material_icon_name="notifications" 
+                        size={16} 
+                        color="#FFFFFF" 
+                      />
+                    </View>
+                  </TouchableOpacity>
+                </View>
                 <View style={styles.headerInfo}>
                   <View style={styles.headerNameRow}>
                     <Text style={styles.headerGreeting}>Welcome back, </Text>
@@ -248,7 +315,7 @@ export default function HomeScreen() {
                       <Text style={styles.regionBadgeText}>{region}</Text>
                     </View>
                     <View style={styles.regionBadge}>
-                      <Text style={styles.regionBadgeText}>Creator</Text>
+                      <Text style={styles.regionBadgeText}>{currentTier}</Text>
                     </View>
                   </View>
                 </View>
@@ -256,18 +323,7 @@ export default function HomeScreen() {
               <View style={styles.headerIcons}>
                 <TouchableOpacity 
                   style={styles.headerIconButton}
-                  onPress={() => router.push('/(tabs)/notifications' as any)}
-                >
-                  <IconSymbol 
-                    ios_icon_name="bell.fill" 
-                    android_material_icon_name="notifications" 
-                    size={24} 
-                    color="#6642EF" 
-                  />
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={styles.headerIconButton}
-                  onPress={() => console.log('Open JAXE Agent chat')}
+                  onPress={() => setChatDrawerVisible(true)}
                 >
                   <IconSymbol 
                     ios_icon_name="message.fill" 
@@ -296,9 +352,9 @@ export default function HomeScreen() {
                       data={{
                         bonusAmount: 100,
                         nextBonus: 175,
-                        liveDays: stats.liveDays,
-                        liveHours: stats.liveHours,
-                        battlesBooked: 1,
+                        liveDays: liveDays,
+                        liveHours: liveHours,
+                        battlesBooked: nextBattle ? 1 : 0,
                       }}
                     />
                   </TouchableOpacity>
@@ -309,10 +365,10 @@ export default function HomeScreen() {
                       type="diamonds"
                       onPress={() => {}}
                       data={{
-                        diamondsEarned: stats.totalDiamonds,
-                        totalGoal: stats.targetAmount,
-                        remaining: stats.remaining,
-                        nextTier: stats.nextTarget,
+                        diamondsEarned: currentDiamonds,
+                        totalGoal: nextTierInfo.target,
+                        remaining: remaining,
+                        nextTier: nextTierInfo.tier,
                       }}
                     />
                   </View>
@@ -330,10 +386,10 @@ export default function HomeScreen() {
                       isFaded={true}
                       onPress={() => {}}
                       data={{
-                        diamondsEarned: stats.totalDiamonds,
-                        totalGoal: stats.targetAmount,
-                        remaining: stats.remaining,
-                        nextTier: stats.nextTarget,
+                        diamondsEarned: currentDiamonds,
+                        totalGoal: nextTierInfo.target,
+                        remaining: remaining,
+                        nextTier: nextTierInfo.tier,
                       }}
                     />
                   </TouchableOpacity>
@@ -346,9 +402,9 @@ export default function HomeScreen() {
                       data={{
                         bonusAmount: 100,
                         nextBonus: 175,
-                        liveDays: stats.liveDays,
-                        liveHours: stats.liveHours,
-                        battlesBooked: 1,
+                        liveDays: liveDays,
+                        liveHours: liveHours,
+                        battlesBooked: nextBattle ? 1 : 0,
                       }}
                     />
                   </View>
@@ -365,7 +421,11 @@ export default function HomeScreen() {
                 <View style={styles.cardHeaderRow}>
                   <View style={styles.cardHeaderLeft}>
                     <View style={styles.pendingDot} />
-                    <Text style={styles.pendingText}>2 PENDING TASKS</Text>
+                    <Text style={styles.pendingText}>
+                      {challengeProgress 
+                        ? `${challengeProgress.totalDays - challengeProgress.completedDays} PENDING TASKS`
+                        : 'LOADING...'}
+                    </Text>
                   </View>
                   <View style={styles.circularProgress}>
                     <AnimatedNumber 
@@ -381,37 +441,41 @@ export default function HomeScreen() {
                 <Text style={styles.cardTitle}>21-Day Challenge</Text>
 
                 {/* Challenge Days */}
-                <View style={styles.challengeDays}>
-                  <View style={styles.challengeDay}>
-                    <View style={[styles.challengeDayCircle, styles.challengeDayCompleted]}>
-                      <IconSymbol 
-                        ios_icon_name="checkmark" 
-                        android_material_icon_name="check" 
-                        size={20} 
-                        color="#FFFFFF" 
-                      />
-                    </View>
-                    <Text style={styles.challengeDayLabel}>Day 4</Text>
+                {challengeProgress && (
+                  <View style={styles.challengeDays}>
+                    {[...Array(4)].map((_, i) => {
+                      const dayNum = challengeProgress.currentDay - 1 + i;
+                      const isCompleted = dayNum < challengeProgress.currentDay;
+                      const isCurrent = dayNum === challengeProgress.currentDay;
+                      const isLocked = dayNum > challengeProgress.currentDay;
+
+                      return (
+                        <View key={i} style={styles.challengeDay}>
+                          <View style={[
+                            styles.challengeDayCircle,
+                            isCompleted && styles.challengeDayCompleted,
+                            isCurrent && styles.challengeDayActive,
+                            isLocked && styles.challengeDayLocked,
+                          ]}>
+                            {isCompleted ? (
+                              <IconSymbol 
+                                ios_icon_name="checkmark" 
+                                android_material_icon_name="check" 
+                                size={20} 
+                                color="#FFFFFF" 
+                              />
+                            ) : (
+                              <Text style={styles.challengeDayNumber}>{dayNum}</Text>
+                            )}
+                          </View>
+                          <Text style={isLocked ? styles.challengeDayLabelLocked : styles.challengeDayLabel}>
+                            Day {dayNum}
+                          </Text>
+                        </View>
+                      );
+                    })}
                   </View>
-                  <View style={styles.challengeDay}>
-                    <View style={[styles.challengeDayCircle, styles.challengeDayActive]}>
-                      <Text style={styles.challengeDayNumber}>5</Text>
-                    </View>
-                    <Text style={styles.challengeDayLabel}>Day 5</Text>
-                  </View>
-                  <View style={styles.challengeDay}>
-                    <View style={[styles.challengeDayCircle, styles.challengeDayLocked]}>
-                      <Text style={styles.challengeDayNumber}>6</Text>
-                    </View>
-                    <Text style={styles.challengeDayLabelLocked}>Day 6</Text>
-                  </View>
-                  <View style={styles.challengeDay}>
-                    <View style={[styles.challengeDayCircle, styles.challengeDayLocked]}>
-                      <Text style={styles.challengeDayNumber}>7</Text>
-                    </View>
-                    <Text style={styles.challengeDayLabelLocked}>Day 7</Text>
-                  </View>
-                </View>
+                )}
 
                 {/* Continue Button */}
                 <TouchableOpacity style={styles.continueButton}>
@@ -524,40 +588,44 @@ export default function HomeScreen() {
                     <Text style={styles.manageButtonText}>Manage</Text>
                   </TouchableOpacity>
                 </View>
-                <Text style={styles.battleSubtitle}>Monetto Airlines</Text>
+                {nextBattle ? (
+                  <>
+                    <Text style={styles.battleSubtitle}>Upcoming Battle</Text>
+                    <View style={styles.battleContent}>
+                      <View style={styles.battlePlayer}>
+                        <Image
+                          source={{ uri: profileImageUrl }}
+                          style={styles.battleAvatar}
+                        />
+                        <Text style={styles.battlePlayerName}>You</Text>
+                      </View>
 
-                <View style={styles.battleContent}>
-                  {/* Left - You */}
-                  <View style={styles.battlePlayer}>
-                    <Image
-                      source={{ uri: profileImageUrl }}
-                      style={styles.battleAvatar}
-                    />
-                    <Text style={styles.battlePlayerName}>You</Text>
-                  </View>
+                      <View style={styles.battleCenter}>
+                        <Text style={styles.battleTimerLabel}>SCHEDULED</Text>
+                        <Text style={styles.battleTimer}>
+                          {new Date(nextBattle.battle_date).toLocaleDateString()}
+                        </Text>
+                        <Text style={styles.battleDate}>
+                          {new Date(nextBattle.battle_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </Text>
+                      </View>
 
-                  {/* Center - Timer */}
-                  <View style={styles.battleCenter}>
-                    <Text style={styles.battleTimerLabel}>ENDS IN</Text>
-                    <Text style={styles.battleTimer}>14:02:10</Text>
-                    <Text style={styles.battleDate}>TOMORROW</Text>
-                  </View>
-
-                  {/* Right - Opponent */}
-                  <View style={styles.battlePlayer}>
-                    <View style={styles.battleAvatarContainer}>
-                      <Image
-                        source={{ uri: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&h=200&fit=crop' }}
-                        style={styles.battleAvatar}
-                      />
-                      <View style={styles.proBadge}>
-                        <Text style={styles.proBadgeText}>PRO</Text>
+                      <View style={styles.battlePlayer}>
+                        <View style={styles.battleAvatarContainer}>
+                          <Image
+                            source={{ uri: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&h=200&fit=crop' }}
+                            style={styles.battleAvatar}
+                          />
+                        </View>
+                        <Text style={styles.battlePlayerName}>
+                          {nextBattle.creator_2_handle || 'Opponent'}
+                        </Text>
                       </View>
                     </View>
-                    <Text style={styles.battlePlayerName}>@AlexD</Text>
-                    <Text style={styles.battlePlayerStats}>••••• 1001</Text>
-                  </View>
-                </View>
+                  </>
+                ) : (
+                  <Text style={styles.battleSubtitle}>No upcoming battles. Book one now!</Text>
+                )}
               </View>
             </CardPressable>
 
@@ -625,6 +693,9 @@ export default function HomeScreen() {
             <View style={{ height: 40 }} />
           </Animated.View>
         </ScrollView>
+
+        {/* Chat Drawer */}
+        <ChatDrawer visible={chatDrawerVisible} onClose={() => setChatDrawerVisible(false)} />
       </View>
     </>
   );
@@ -722,13 +793,32 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flex: 1,
   },
+  profileContainer: {
+    position: 'relative',
+    marginRight: 14,
+  },
   headerAvatar: {
     width: 80,
     height: 80,
     borderRadius: 40,
-    marginRight: 14,
     borderWidth: 3,
     borderColor: '#6642EF',
+  },
+  notificationBellOverlay: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    zIndex: 10,
+  },
+  notificationBellBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#6642EF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: '#0F0F0F',
   },
   headerInfo: {
     flex: 1,
@@ -1106,30 +1196,11 @@ const styles = StyleSheet.create({
     borderRadius: 32,
     marginBottom: 8,
   },
-  proBadge: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    backgroundColor: '#6642EF',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
-  },
-  proBadgeText: {
-    fontSize: 10,
-    fontFamily: 'Poppins_700Bold',
-    color: '#FFFFFF',
-  },
   battlePlayerName: {
     fontSize: 13,
     fontFamily: 'Poppins_600SemiBold',
     color: '#FFFFFF',
     marginBottom: 2,
-  },
-  battlePlayerStats: {
-    fontSize: 11,
-    fontFamily: 'Poppins_500Medium',
-    color: '#707070',
   },
   battleCenter: {
     alignItems: 'center',
@@ -1143,11 +1214,12 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   battleTimer: {
-    fontSize: 24,
+    fontSize: 18,
     fontFamily: 'Poppins_800ExtraBold',
     color: '#FFFFFF',
     letterSpacing: -1,
     marginBottom: 4,
+    textAlign: 'center',
   },
   battleDate: {
     fontSize: 10,

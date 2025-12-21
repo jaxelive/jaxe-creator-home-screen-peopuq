@@ -71,6 +71,15 @@ const TOOLS: ToolItem[] = [
     route: '/(tabs)/ai-flyers',
     color: '#8B5CF6',
   },
+  {
+    id: 'bonifications',
+    title: 'Bonifications',
+    description: 'Calculate your bonus',
+    icon: 'dollarsign.circle.fill',
+    androidIcon: 'attach-money',
+    route: '/(tabs)/bonifications',
+    color: '#10B981',
+  },
 ];
 
 export default function ToolsScreen() {
