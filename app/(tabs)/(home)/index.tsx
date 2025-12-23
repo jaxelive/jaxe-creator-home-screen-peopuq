@@ -1009,9 +1009,9 @@ const styles = StyleSheet.create({
   },
 
   // ========== REST OF HOME CONTENT (SEPARATE SECTION) ==========
-  // Additional 100px offset added to previous offset
+  // Moved up by 20px: 180 -> 160
   restOfHomeContent: {
-    marginTop: 180,
+    marginTop: 160,
   },
   diamondsBonusButton: {
     backgroundColor: '#6642EF',
