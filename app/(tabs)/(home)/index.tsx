@@ -63,6 +63,19 @@ function getTierCheckmarkColor(tier: string): string {
   return '#10B981'; // Rookie green
 }
 
+interface TopCreator {
+  creator_handle: string;
+  total_diamonds: number;
+  avatar_url: string | null;
+  profile_picture_url: string | null;
+  region: string | null;
+}
+
+interface UserRank {
+  rank: number;
+  total_creators: number;
+}
+
 export default function HomeScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   
@@ -81,7 +94,8 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [activeCardIndex, setActiveCardIndex] = useState(0);
   const [chatDrawerVisible, setChatDrawerVisible] = useState(false);
-  const [topCreators, setTopCreators] = useState<any[]>([]);
+  const [topCreators, setTopCreators] = useState<TopCreator[]>([]);
+  const [userRank, setUserRank] = useState<UserRank | null>(null);
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -210,11 +224,13 @@ export default function HomeScreen() {
   };
 
   const fetchTopCreators = async () => {
+    if (!creator) return;
+
     try {
-      // Fetch top 3 creators by total_diamonds
+      // Fetch top 3 creators by total_diamonds with region
       const { data: topCreatorsData, error: topCreatorsError } = await supabase
         .from('creators')
-        .select('creator_handle, total_diamonds, avatar_url, profile_picture_url')
+        .select('creator_handle, total_diamonds, avatar_url, profile_picture_url, region')
         .eq('is_active', true)
         .order('total_diamonds', { ascending: false })
         .limit(3);
@@ -224,6 +240,37 @@ export default function HomeScreen() {
       } else {
         console.log('[HomeScreen] Top 3 creators loaded:', topCreatorsData);
         setTopCreators(topCreatorsData || []);
+      }
+
+      // Fetch user's rank
+      const { data: rankData, error: rankError } = await supabase.rpc('get_creator_rank', {
+        p_creator_id: creator.id
+      });
+
+      if (rankError) {
+        console.error('[HomeScreen] Error fetching user rank:', rankError);
+        // Fallback: calculate rank manually
+        const { data: allCreators, error: allError } = await supabase
+          .from('creators')
+          .select('id, total_diamonds')
+          .eq('is_active', true)
+          .order('total_diamonds', { ascending: false });
+
+        if (!allError && allCreators) {
+          const userIndex = allCreators.findIndex(c => c.id === creator.id);
+          const rank = userIndex >= 0 ? userIndex + 1 : allCreators.length;
+          setUserRank({
+            rank: rank,
+            total_creators: allCreators.length
+          });
+          console.log('[HomeScreen] User rank (fallback):', rank, '/', allCreators.length);
+        }
+      } else if (rankData) {
+        setUserRank({
+          rank: rankData.rank || 1,
+          total_creators: rankData.total_creators || 1
+        });
+        console.log('[HomeScreen] User rank:', rankData);
       }
     } catch (error: any) {
       console.error('[HomeScreen] Unexpected error fetching top creators:', error);
@@ -582,36 +629,76 @@ export default function HomeScreen() {
                 <Text style={styles.topCreatorsSubtitle}>Leading creators by diamonds earned</Text>
                 
                 {topCreators.length > 0 ? (
-                  topCreators.map((topCreator, index) => (
-                    <View key={index} style={styles.topCreatorRow}>
-                      <View style={styles.topCreatorRank}>
-                        <Text style={styles.topCreatorRankText}>{index + 1}</Text>
-                      </View>
-                      <View style={styles.topCreatorAvatar}>
-                        {topCreator.avatar_url || topCreator.profile_picture_url ? (
-                          <Image
-                            source={{ uri: topCreator.avatar_url || topCreator.profile_picture_url }}
-                            style={styles.topCreatorAvatarImage}
-                          />
-                        ) : (
-                          <View style={styles.topCreatorAvatarPlaceholder}>
-                            <IconSymbol
-                              ios_icon_name="person.fill"
-                              android_material_icon_name="person"
-                              size={20}
-                              color="#A0A0A0"
+                  <>
+                    {topCreators.map((topCreator, index) => (
+                      <View key={index} style={styles.topCreatorRow}>
+                        <View style={styles.topCreatorRank}>
+                          <Text style={styles.topCreatorRankText}>{index + 1}</Text>
+                        </View>
+                        <View style={styles.topCreatorAvatar}>
+                          {topCreator.avatar_url || topCreator.profile_picture_url ? (
+                            <Image
+                              source={{ uri: topCreator.avatar_url || topCreator.profile_picture_url }}
+                              style={styles.topCreatorAvatarImage}
                             />
+                          ) : (
+                            <View style={styles.topCreatorAvatarPlaceholder}>
+                              <IconSymbol
+                                ios_icon_name="person.fill"
+                                android_material_icon_name="person"
+                                size={20}
+                                color="#A0A0A0"
+                              />
+                            </View>
+                          )}
+                        </View>
+                        <View style={styles.topCreatorInfo}>
+                          <Text style={styles.topCreatorHandle}>@{topCreator.creator_handle}</Text>
+                          <View style={styles.topCreatorMetaRow}>
+                            <Text style={styles.topCreatorDiamonds}>
+                              {topCreator.total_diamonds.toLocaleString()} 💎
+                            </Text>
+                            <View style={styles.topCreatorRegionBadge}>
+                              <Text style={styles.topCreatorRegionText}>
+                                {topCreator.region || 'N/A'}
+                              </Text>
+                            </View>
                           </View>
-                        )}
+                        </View>
                       </View>
-                      <View style={styles.topCreatorInfo}>
-                        <Text style={styles.topCreatorHandle}>@{topCreator.creator_handle}</Text>
-                        <Text style={styles.topCreatorDiamonds}>
-                          {topCreator.total_diamonds.toLocaleString()} diamonds
+                    ))}
+
+                    {/* YOUR RANK - PROMINENT SECTION */}
+                    {userRank && (
+                      <View style={styles.yourRankContainer}>
+                        <View style={styles.yourRankHeader}>
+                          <IconSymbol 
+                            ios_icon_name="trophy.fill" 
+                            android_material_icon_name="emoji-events" 
+                            size={24} 
+                            color="#FFD700" 
+                          />
+                          <Text style={styles.yourRankTitle}>Your Rank</Text>
+                        </View>
+                        <View style={styles.yourRankContent}>
+                          <View style={styles.yourRankNumberContainer}>
+                            <Text style={styles.yourRankNumber}>#{userRank.rank}</Text>
+                            <Text style={styles.yourRankTotal}>of {userRank.total_creators}</Text>
+                          </View>
+                          <View style={styles.yourRankDivider} />
+                          <View style={styles.yourRankStats}>
+                            <Text style={styles.yourRankStatsLabel}>Total Diamonds</Text>
+                            <Text style={styles.yourRankStatsValue}>
+                              {creator.total_diamonds.toLocaleString()} 💎
+                            </Text>
+                          </View>
+                        </View>
+                        <Text style={styles.yourRankFooter}>
+                          Keep going! You&apos;re doing great! 🚀
                         </Text>
                       </View>
-                    </View>
-                  ))
+                    )}
+                  </>
                 ) : (
                   <Text style={styles.noDataText}>No data available</Text>
                 )}
@@ -1246,12 +1333,28 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Poppins_700Bold',
     color: '#FFFFFF',
-    marginBottom: 2,
+    marginBottom: 4,
+  },
+  topCreatorMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   topCreatorDiamonds: {
     fontSize: 13,
     fontFamily: 'Poppins_500Medium',
     color: '#A0A0A0',
+  },
+  topCreatorRegionBadge: {
+    backgroundColor: '#2A2A2A',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  topCreatorRegionText: {
+    fontSize: 10,
+    fontFamily: 'Poppins_600SemiBold',
+    color: '#6642EF',
   },
   noDataText: {
     fontSize: 14,
@@ -1259,6 +1362,75 @@ const styles = StyleSheet.create({
     color: '#A0A0A0',
     textAlign: 'center',
     paddingVertical: 20,
+  },
+
+  // YOUR RANK - PROMINENT SECTION
+  yourRankContainer: {
+    marginTop: 24,
+    padding: 20,
+    backgroundColor: '#2A2A2A',
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: '#6642EF',
+  },
+  yourRankHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 16,
+  },
+  yourRankTitle: {
+    fontSize: 18,
+    fontFamily: 'Poppins_700Bold',
+    color: '#FFFFFF',
+  },
+  yourRankContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  yourRankNumberContainer: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  yourRankNumber: {
+    fontSize: 48,
+    fontFamily: 'Poppins_800ExtraBold',
+    color: '#6642EF',
+    lineHeight: 52,
+  },
+  yourRankTotal: {
+    fontSize: 14,
+    fontFamily: 'Poppins_500Medium',
+    color: '#A0A0A0',
+    marginTop: 4,
+  },
+  yourRankDivider: {
+    width: 2,
+    height: 60,
+    backgroundColor: '#3A3A3A',
+    marginHorizontal: 20,
+  },
+  yourRankStats: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  yourRankStatsLabel: {
+    fontSize: 12,
+    fontFamily: 'Poppins_500Medium',
+    color: '#A0A0A0',
+    marginBottom: 4,
+  },
+  yourRankStatsValue: {
+    fontSize: 20,
+    fontFamily: 'Poppins_700Bold',
+    color: '#FFFFFF',
+  },
+  yourRankFooter: {
+    fontSize: 13,
+    fontFamily: 'Poppins_500Medium',
+    color: '#A0A0A0',
+    textAlign: 'center',
   },
 
   // ACADEMY CARD
