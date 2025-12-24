@@ -199,6 +199,8 @@ export default function HomeScreen() {
                       <AnimatedNumber 
                         value={stats.monthlyDiamonds}
                         style={styles.diamondNumber}
+                        delay={200}
+                        duration={1000}
                       />
                       <Text style={styles.diamondLabel}>💎</Text>
                     </View>
@@ -337,6 +339,8 @@ export default function HomeScreen() {
                     <AnimatedNumber 
                       value={stats.liveDays}
                       style={styles.statValue}
+                      delay={500}
+                      duration={800}
                     />
                     <Text style={styles.statLabel}>LIVE Days</Text>
                   </LinearGradient>
@@ -349,6 +353,8 @@ export default function HomeScreen() {
                     <AnimatedNumber 
                       value={stats.liveHours}
                       style={styles.statValue}
+                      delay={550}
+                      duration={800}
                     />
                     <Text style={styles.statLabel}>Hours</Text>
                   </LinearGradient>
@@ -361,6 +367,8 @@ export default function HomeScreen() {
                     <AnimatedNumber 
                       value={stats.diamondsToday}
                       style={styles.statValue}
+                      delay={600}
+                      duration={800}
                     />
                     <Text style={styles.statLabel}>Diamonds</Text>
                   </LinearGradient>
@@ -373,6 +381,8 @@ export default function HomeScreen() {
                     <AnimatedNumber 
                       value={stats.streak}
                       style={styles.statValue}
+                      delay={650}
+                      duration={800}
                     />
                     <Text style={styles.statLabel}>Day Streak 🔥</Text>
                   </LinearGradient>

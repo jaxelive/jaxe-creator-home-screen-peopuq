@@ -246,6 +246,8 @@ export default function BonusDetailsScreen() {
               <AnimatedNumber
                 value={creator.diamonds_monthly || 0}
                 style={styles.heroDiamonds}
+                delay={200}
+                duration={1200}
               />
             </View>
 
@@ -263,6 +265,8 @@ export default function BonusDetailsScreen() {
                   value={liveHours}
                   style={styles.liveStatValue}
                   formatNumber={false}
+                  delay={400}
+                  duration={800}
                 />
               </View>
               <View style={styles.liveStatDivider} />
@@ -278,6 +282,8 @@ export default function BonusDetailsScreen() {
                   value={liveDays}
                   style={styles.liveStatValue}
                   formatNumber={false}
+                  delay={450}
+                  duration={800}
                 />
               </View>
             </View>
@@ -335,6 +341,8 @@ export default function BonusDetailsScreen() {
                       value={diamondsRemaining} 
                       style={styles.diamondsRemainingNumber}
                       formatNumber={true}
+                      delay={500}
+                      duration={1000}
                     />
                     <Text style={styles.diamondsRemainingText}> diamonds remaining to reach {nextBonusTier.name}</Text>
                   </Text>
@@ -346,6 +354,8 @@ export default function BonusDetailsScreen() {
                   backgroundColor="rgba(102, 66, 239, 0.2)"
                   fillColor="#10B981"
                   containerStyle={{ marginBottom: 20 }}
+                  delay={600}
+                  duration={1000}
                 />
 
                 <Text style={styles.requirementsTitle}>Requirements Status</Text>

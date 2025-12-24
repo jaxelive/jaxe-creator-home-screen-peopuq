@@ -501,6 +501,8 @@ export default function HomeScreen() {
                         decimals={0}
                         suffix="%"
                         formatNumber={false}
+                        delay={300}
+                        duration={800}
                       />
                     </View>
                   </View>
@@ -621,6 +623,8 @@ export default function HomeScreen() {
                           value={educationProgress} 
                           style={styles.academyProgressValue}
                           formatNumber={false}
+                          delay={400}
+                          duration={800}
                         />
                         <Text style={styles.academyProgressValue}>/5</Text>
                       </View>
@@ -629,6 +633,8 @@ export default function HomeScreen() {
                         percentage={(educationProgress / 5) * 100}
                         height={6}
                         containerStyle={{ marginBottom: 12 }}
+                        delay={500}
+                        duration={1000}
                       />
 
                       <View style={styles.quizStatus}>
