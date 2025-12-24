@@ -14,6 +14,7 @@ import { colors } from '@/styles/commonStyles';
 import { useCreatorData } from '@/hooks/useCreatorData';
 import { IconSymbol } from '@/components/IconSymbol';
 import { AnimatedNumber } from '@/components/AnimatedNumber';
+import { AnimatedProgressBar } from '@/components/AnimatedProgressBar';
 import { useFonts, Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold, Poppins_800ExtraBold } from '@expo-google-fonts/poppins';
 
 interface BonusTier {
@@ -107,6 +108,20 @@ function calculateTier(
   return { tier: null, checklist };
 }
 
+function getNextBonusTier(currentDays: number, currentHours: number, currentDiamonds: number): BonusTier | null {
+  // Find the next tier the user can qualify for
+  for (const tier of BONUS_TIERS) {
+    const daysOk = currentDays >= tier.minDays;
+    const hoursOk = currentHours >= tier.minHours;
+    const diamondsOk = currentDiamonds >= tier.minDiamonds && currentDiamonds <= tier.maxDiamonds;
+
+    if (!daysOk || !hoursOk || !diamondsOk) {
+      return tier;
+    }
+  }
+  return null;
+}
+
 export default function BonusDetailsScreen() {
   const { creator, loading: creatorLoading, stats } = useCreatorData();
   const [fontsLoaded] = useFonts({
@@ -128,6 +143,22 @@ export default function BonusDetailsScreen() {
 
   // Current tier
   const currentTier = creator ? getTierFromDiamonds(creator.total_diamonds || 0, creator.region || '') : 'Rookie';
+
+  // Current stats
+  const liveDays = creator?.live_days_30d || 0;
+  const liveHours = Math.floor((creator?.live_duration_seconds_30d || 0) / 3600);
+  const battlesBooked = 1; // Placeholder
+
+  // Requirements completion
+  const liveDaysComplete = liveDays >= 15;
+  const liveHoursComplete = liveHours >= 40;
+  const battlesComplete = battlesBooked >= 1;
+
+  // Next bonus tier
+  const nextBonusTier = getNextBonusTier(liveDays, liveHours, creator?.diamonds_monthly || 0);
+  const nextBonusProgress = nextBonusTier 
+    ? Math.min(100, ((liveDays / nextBonusTier.minDays) + (liveHours / nextBonusTier.minHours) + ((creator?.diamonds_monthly || 0) / nextBonusTier.minDiamonds)) / 3 * 100)
+    : 100;
 
   const handleCalculate = () => {
     const days = parseInt(calcDays) || 0;
@@ -210,11 +241,11 @@ export default function BonusDetailsScreen() {
           </View>
         </View>
 
-        {/* Your Bonus for This Month - INCREASED PROMINENCE */}
-        <View style={styles.bonusCard}>
+        {/* Your Bonus for This Month - GREEN CARD */}
+        <View style={styles.bonusCardGreen}>
           <Text style={styles.bonusCardTitle}>Your bonus for this month</Text>
           
-          {/* BONUS AMOUNT - MUCH LARGER */}
+          {/* BONUS AMOUNT */}
           <View style={styles.bonusMainSection}>
             <View style={styles.bonusMainAmountContainer}>
               <Text style={styles.bonusMainAmount}>$150</Text>
@@ -225,40 +256,131 @@ export default function BonusDetailsScreen() {
                 ios_icon_name="arrow.up.right"
                 android_material_icon_name="trending-up"
                 size={32}
-                color="#10B981"
+                color="#FFFFFF"
               />
               <Text style={styles.bonusPayoutRangeText}>$100 - $200 range</Text>
             </View>
           </View>
+        </View>
 
-          {/* Breakdown */}
-          <View style={styles.bonusBreakdown}>
-            <View style={styles.bonusItem}>
-              <View style={styles.bonusItemLeft}>
-                <IconSymbol
-                  ios_icon_name="dollarsign.circle.fill"
-                  android_material_icon_name="attach-money"
-                  size={20}
-                  color={colors.primary}
-                />
-                <Text style={styles.bonusItemText}>Base Bonus</Text>
+        {/* Your Next Bonus Section */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Your next bonus</Text>
+          
+          {nextBonusTier ? (
+            <>
+              <View style={styles.nextBonusHeader}>
+                <Text style={styles.nextBonusTierName}>{nextBonusTier.name}</Text>
+                <Text style={styles.nextBonusPayout}>
+                  ${nextBonusTier.minPayout}–${nextBonusTier.maxPayout}
+                </Text>
               </View>
-              <Text style={styles.bonusItemValue}>$100</Text>
-            </View>
 
-            <View style={styles.bonusItem}>
-              <View style={styles.bonusItemLeft}>
-                <IconSymbol
-                  ios_icon_name="star.fill"
-                  android_material_icon_name="star"
-                  size={20}
-                  color={colors.primary}
-                />
-                <Text style={styles.bonusItemText}>Performance Bonus</Text>
+              <AnimatedProgressBar
+                percentage={nextBonusProgress}
+                height={12}
+                backgroundColor="rgba(102, 66, 239, 0.2)"
+                fillColor="#10B981"
+                containerStyle={{ marginBottom: 20 }}
+              />
+
+              <Text style={styles.requirementsTitle}>Requirements Status</Text>
+
+              {/* LIVE Days */}
+              <View style={styles.requirementStatusRow}>
+                <View style={styles.requirementStatusLeft}>
+                  <IconSymbol
+                    ios_icon_name="calendar"
+                    android_material_icon_name="calendar-today"
+                    size={20}
+                    color={colors.textSecondary}
+                  />
+                  <Text style={styles.requirementStatusLabel}>LIVE Days</Text>
+                </View>
+                <View style={styles.requirementStatusRight}>
+                  <Text style={styles.requirementStatusValue}>
+                    {liveDays} / {nextBonusTier.minDays}
+                  </Text>
+                  {liveDaysComplete ? (
+                    <View style={styles.statusCircleComplete}>
+                      <IconSymbol 
+                        ios_icon_name="checkmark" 
+                        android_material_icon_name="check" 
+                        size={14} 
+                        color="#FFFFFF" 
+                      />
+                    </View>
+                  ) : (
+                    <View style={styles.statusCircleEmpty} />
+                  )}
+                </View>
               </View>
-              <Text style={styles.bonusItemValue}>$50</Text>
-            </View>
-          </View>
+
+              {/* LIVE Hours */}
+              <View style={styles.requirementStatusRow}>
+                <View style={styles.requirementStatusLeft}>
+                  <IconSymbol
+                    ios_icon_name="clock"
+                    android_material_icon_name="access-time"
+                    size={20}
+                    color={colors.textSecondary}
+                  />
+                  <Text style={styles.requirementStatusLabel}>LIVE Hours</Text>
+                </View>
+                <View style={styles.requirementStatusRight}>
+                  <Text style={styles.requirementStatusValue}>
+                    {liveHours} / {nextBonusTier.minHours}
+                  </Text>
+                  {liveHoursComplete ? (
+                    <View style={styles.statusCircleComplete}>
+                      <IconSymbol 
+                        ios_icon_name="checkmark" 
+                        android_material_icon_name="check" 
+                        size={14} 
+                        color="#FFFFFF" 
+                      />
+                    </View>
+                  ) : (
+                    <View style={styles.statusCircleEmpty} />
+                  )}
+                </View>
+              </View>
+
+              {/* Battles Booked */}
+              <View style={styles.requirementStatusRow}>
+                <View style={styles.requirementStatusLeft}>
+                  <IconSymbol
+                    ios_icon_name="bolt.fill"
+                    android_material_icon_name="flash-on"
+                    size={20}
+                    color={colors.textSecondary}
+                  />
+                  <Text style={styles.requirementStatusLabel}>Battles Booked</Text>
+                </View>
+                <View style={styles.requirementStatusRight}>
+                  <Text style={styles.requirementStatusValue}>
+                    {battlesBooked} / 1
+                  </Text>
+                  {battlesComplete ? (
+                    <View style={styles.statusCircleComplete}>
+                      <IconSymbol 
+                        ios_icon_name="checkmark" 
+                        android_material_icon_name="check" 
+                        size={14} 
+                        color="#FFFFFF" 
+                      />
+                    </View>
+                  ) : (
+                    <View style={styles.statusCircleEmpty} />
+                  )}
+                </View>
+              </View>
+            </>
+          ) : (
+            <Text style={styles.noNextBonusText}>
+              You&apos;ve reached the highest bonus tier! Keep up the great work.
+            </Text>
+          )}
         </View>
 
         {/* How Bonuses Work - Table */}
@@ -513,9 +635,9 @@ const styles = StyleSheet.create({
     letterSpacing: -2,
   },
   
-  // BONUS CARD - INCREASED PROMINENCE
-  bonusCard: {
-    backgroundColor: colors.backgroundAlt,
+  // BONUS CARD - GREEN BACKGROUND
+  bonusCardGreen: {
+    backgroundColor: '#10B981',
     borderRadius: 24,
     padding: 28,
     marginBottom: 16,
@@ -523,13 +645,12 @@ const styles = StyleSheet.create({
   bonusCardTitle: {
     fontSize: 18,
     fontFamily: 'Poppins_600SemiBold',
-    color: colors.text,
+    color: '#FFFFFF',
     marginBottom: 24,
     textAlign: 'center',
   },
   bonusMainSection: {
     alignItems: 'center',
-    marginBottom: 28,
   },
   bonusMainAmountContainer: {
     alignItems: 'center',
@@ -538,20 +659,20 @@ const styles = StyleSheet.create({
   bonusMainAmount: {
     fontSize: 72,
     fontFamily: 'Poppins_800ExtraBold',
-    color: colors.primary,
+    color: '#FFFFFF',
     letterSpacing: -3,
     marginBottom: 8,
   },
   bonusMainLabel: {
     fontSize: 20,
     fontFamily: 'Poppins_600SemiBold',
-    color: colors.text,
+    color: '#FFFFFF',
   },
   bonusPayoutRange: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 16,
@@ -559,34 +680,7 @@ const styles = StyleSheet.create({
   bonusPayoutRangeText: {
     fontSize: 16,
     fontFamily: 'Poppins_700Bold',
-    color: '#10B981',
-  },
-  bonusBreakdown: {
-    gap: 12,
-    paddingTop: 20,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  bonusItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-  },
-  bonusItemLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  bonusItemText: {
-    fontSize: 15,
-    fontFamily: 'Poppins_500Medium',
-    color: colors.text,
-  },
-  bonusItemValue: {
-    fontSize: 16,
-    fontFamily: 'Poppins_700Bold',
-    color: colors.text,
+    color: '#FFFFFF',
   },
   
   card: {
@@ -613,6 +707,85 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginBottom: 20,
   },
+  
+  // Next Bonus Section
+  nextBonusHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  nextBonusTierName: {
+    fontSize: 24,
+    fontFamily: 'Poppins_800ExtraBold',
+    color: colors.text,
+  },
+  nextBonusPayout: {
+    fontSize: 18,
+    fontFamily: 'Poppins_700Bold',
+    color: '#10B981',
+  },
+  requirementsTitle: {
+    fontSize: 16,
+    fontFamily: 'Poppins_700Bold',
+    color: colors.text,
+    marginBottom: 16,
+  },
+  requirementStatusRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: colors.background,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  requirementStatusLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  requirementStatusLabel: {
+    fontSize: 15,
+    fontFamily: 'Poppins_600SemiBold',
+    color: colors.text,
+  },
+  requirementStatusRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  requirementStatusValue: {
+    fontSize: 15,
+    fontFamily: 'Poppins_700Bold',
+    color: colors.text,
+  },
+  statusCircleComplete: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#10B981',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  statusCircleEmpty: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: colors.border,
+    backgroundColor: 'transparent',
+  },
+  noNextBonusText: {
+    fontSize: 15,
+    fontFamily: 'Poppins_500Medium',
+    color: colors.textSecondary,
+    textAlign: 'center',
+    paddingVertical: 20,
+  },
+  
   tierTableCard: {
     backgroundColor: colors.background,
     borderRadius: 16,

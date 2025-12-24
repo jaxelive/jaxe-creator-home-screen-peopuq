@@ -69,17 +69,14 @@ export function RotatingCard({ type, isFaded = false, onPress, data }: RotatingC
             <Text style={styles.earnedLabel}>Earned</Text>
           </View>
 
-          {/* Next Bonus */}
+          {/* Next Bonus - INCREASED SIZE */}
           <View style={styles.nextBonusSection}>
-            <Text style={styles.nextBonusLabel}>NEXT BONUS ${data.nextBonus || 175}</Text>
-            <View style={styles.requirementsTextContainer}>
-              <AnimatedNumber 
-                value={requirementsMet}
-                style={styles.requirementsText}
-                formatNumber={false}
-              />
-              <Text style={styles.requirementsText}> of 3 requirements met</Text>
-            </View>
+            <Text style={styles.nextBonusLabel}>NEXT BONUS</Text>
+            <AnimatedNumber 
+              value={data.nextBonus || 175}
+              style={styles.nextBonusValue}
+              prefix="$"
+            />
           </View>
 
           {/* Progress Bar */}
@@ -88,8 +85,11 @@ export function RotatingCard({ type, isFaded = false, onPress, data }: RotatingC
             height={8}
             backgroundColor="rgba(255, 255, 255, 0.2)"
             fillColor="rgba(255, 255, 255, 0.9)"
-            containerStyle={{ marginBottom: 12 }}
+            containerStyle={{ marginBottom: 16 }}
           />
+
+          {/* Requirements Label */}
+          <Text style={styles.requirementsLabel}>Requirements</Text>
 
           {/* Requirements */}
           <View style={styles.requirementsContainer}>
@@ -359,25 +359,27 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.9)',
   },
   nextBonusSection: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   nextBonusLabel: {
     fontSize: 11,
     fontFamily: 'Poppins_700Bold',
-    color: '#FFFFFF',
+    color: 'rgba(255, 255, 255, 0.8)',
     letterSpacing: 0.5,
+    marginBottom: 4,
   },
-  requirementsTextContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  nextBonusValue: {
+    fontSize: 36,
+    fontFamily: 'Poppins_800ExtraBold',
+    color: '#FFFFFF',
+    letterSpacing: -1,
   },
-  requirementsText: {
+  requirementsLabel: {
     fontSize: 11,
-    fontFamily: 'Poppins_500Medium',
-    color: 'rgba(255, 255, 255, 0.9)',
+    fontFamily: 'Poppins_700Bold',
+    color: 'rgba(255, 255, 255, 0.8)',
+    letterSpacing: 0.5,
+    marginBottom: 8,
   },
   requirementsContainer: {
     gap: 10,
@@ -410,7 +412,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_700Bold',
     color: '#FFFFFF',
   },
-  // NEW: Status Circle Indicators (always visible, same space reserved)
+  // Status Circle Indicators (always visible, same space reserved)
   statusCircleComplete: {
     width: 24,
     height: 24,
@@ -426,22 +428,6 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.4)',
     backgroundColor: 'transparent',
-  },
-  // REMOVED: Old checkmark and empty circle styles
-  checkmarkSmall: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: 'rgba(16, 185, 129, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  emptyCircle: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
   },
 
   // Diamonds Card Styles - NUMBER AT TOP-LEFT
