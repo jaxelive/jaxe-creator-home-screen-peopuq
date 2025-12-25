@@ -15,7 +15,6 @@ import {
 import { Stack, router } from 'expo-router';
 import { colors } from '@/styles/commonStyles';
 import { supabase } from '@/app/integrations/supabase/client';
-import { useSupabase } from '@/contexts/SupabaseContext';
 import { useCreatorData } from '@/hooks/useCreatorData';
 import { IconSymbol } from '@/components/IconSymbol';
 import { useFonts, Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold } from '@expo-google-fonts/poppins';
@@ -71,14 +70,16 @@ interface LiveTrainingSession {
 interface TrainingRegistration {
   id: string;
   training_session_id: string;
-  user_id: string;
+  creator_handle: string;
   registered_at: string;
   attended: boolean;
 }
 
+// Hardcoded creator handle - no authentication needed
+const CREATOR_HANDLE = 'avelezsanti';
+
 export default function AcademyScreen() {
-  const { user, session, loading: authLoading } = useSupabase();
-  const { creator } = useCreatorData();
+  const { creator } = useCreatorData(CREATOR_HANDLE);
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
     Poppins_500Medium,
@@ -97,33 +98,13 @@ export default function AcademyScreen() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    console.log('[Academy] Component mounted');
-    console.log('[Academy] Auth loading:', authLoading);
-    console.log('[Academy] User:', user?.id);
-    console.log('[Academy] Session:', session ? 'Active' : 'None');
+    console.log('[Academy] Component mounted for creator:', CREATOR_HANDLE);
+    fetchAcademyData();
   }, []);
 
-  useEffect(() => {
-    if (!authLoading) {
-      if (user) {
-        console.log('[Academy] User authenticated, fetching data for:', user.id);
-        fetchAcademyData();
-      } else {
-        console.log('[Academy] No authenticated user');
-        setError('Please log in to access the Academy');
-        setLoading(false);
-      }
-    }
-  }, [user, authLoading]);
-
   const fetchAcademyData = async () => {
-    if (!user) {
-      console.log('[Academy] No user, skipping data fetch');
-      return;
-    }
-
     try {
-      console.log('[Academy] Starting data fetch for user:', user.id);
+      console.log('[Academy] Starting data fetch for creator:', CREATOR_HANDLE);
       setLoading(true);
       setError(null);
 
@@ -154,13 +135,13 @@ export default function AcademyScreen() {
         });
         setNextTraining(trainingData);
 
-        // Check if user is registered
+        // Check if creator is registered
         console.log('[Academy] Checking registration status...');
         const { data: regData, error: regError } = await supabase
           .from('training_registrations')
           .select('*')
           .eq('training_session_id', trainingData.id)
-          .eq('user_id', user.id)
+          .eq('creator_handle', CREATOR_HANDLE)
           .maybeSingle();
 
         if (regError) {
@@ -207,12 +188,12 @@ export default function AcademyScreen() {
 
       setContentItems(transformedContent);
 
-      // Fetch video progress
+      // Fetch video progress for this creator
       console.log('[Academy] Fetching video progress...');
       const { data: progressData, error: progressError } = await supabase
         .from('user_video_progress')
         .select('*')
-        .eq('user_id', user.id);
+        .eq('creator_handle', CREATOR_HANDLE);
 
       if (progressError) {
         console.error('[Academy] Error fetching video progress:', progressError);
@@ -225,12 +206,12 @@ export default function AcademyScreen() {
 
       setVideoProgress(progressData || []);
 
-      // Fetch quiz attempts
+      // Fetch quiz attempts for this creator
       console.log('[Academy] Fetching quiz attempts...');
       const { data: quizData, error: quizError } = await supabase
         .from('user_quiz_attempts')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('creator_handle', CREATOR_HANDLE)
         .order('created_at', { ascending: false });
 
       if (quizError) {
@@ -272,10 +253,10 @@ export default function AcademyScreen() {
     console.log('[Academy] Manual refresh triggered');
     setRefreshing(true);
     fetchAcademyData();
-  }, [user]);
+  }, []);
 
   const handleRegister = async () => {
-    if (!nextTraining || !user || registering) return;
+    if (!nextTraining || registering) return;
 
     try {
       console.log('[Academy] Registering for training:', nextTraining.id);
@@ -285,7 +266,7 @@ export default function AcademyScreen() {
         .from('training_registrations')
         .insert({
           training_session_id: nextTraining.id,
-          user_id: user.id,
+          creator_handle: CREATOR_HANDLE,
         })
         .select()
         .single();
@@ -441,7 +422,7 @@ export default function AcademyScreen() {
     (item) => item.content_type === 'quiz' && isItemCompleted(item)
   );
 
-  if (authLoading || loading || !fontsLoaded) {
+  if (loading || !fontsLoaded) {
     return (
       <View style={styles.container}>
         <Stack.Screen
@@ -458,30 +439,6 @@ export default function AcademyScreen() {
           {error && (
             <Text style={styles.errorText}>{error}</Text>
           )}
-        </View>
-      </View>
-    );
-  }
-
-  if (!user) {
-    return (
-      <View style={styles.container}>
-        <Stack.Screen
-          options={{
-            title: 'Academy',
-            headerShown: true,
-            headerStyle: { backgroundColor: colors.background },
-            headerTintColor: colors.text,
-          }}
-        />
-        <View style={styles.centerContent}>
-          <Text style={styles.errorText}>Please log in to access the Academy</Text>
-          <TouchableOpacity 
-            style={styles.retryButton} 
-            onPress={() => router.push('/login')}
-          >
-            <Text style={styles.retryButtonText}>Go to Login</Text>
-          </TouchableOpacity>
         </View>
       </View>
     );
@@ -863,18 +820,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_500Medium',
     color: colors.error,
     textAlign: 'center',
-  },
-  retryButton: {
-    marginTop: 16,
-    backgroundColor: colors.primary,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 12,
-  },
-  retryButtonText: {
-    fontSize: 16,
-    fontFamily: 'Poppins_600SemiBold',
-    color: '#FFFFFF',
   },
   emptyState: {
     padding: 40,

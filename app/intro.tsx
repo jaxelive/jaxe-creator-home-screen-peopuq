@@ -42,9 +42,9 @@ export default function IntroScreen() {
       ),
     ]).start();
 
-    // Navigate after 3 seconds - ALWAYS go to home (login disabled for now)
+    // Navigate after 3 seconds - go directly to home (no authentication)
     const timer = setTimeout(() => {
-      console.log('[IntroScreen] Navigating to home (login disabled)');
+      console.log('[IntroScreen] Navigating to home (no authentication required)');
       router.replace('/(tabs)/(home)/');
     }, 3000);
 
@@ -96,7 +96,7 @@ export default function IntroScreen() {
         
         <View style={styles.taglineContainer}>
           <Text style={styles.tagline}>Level up your creator journey.</Text>
-          <Text style={styles.devNote}>Testing with @avelezsanti</Text>
+          <Text style={styles.devNote}>Testing Mode: @avelezsanti</Text>
         </View>
       </Animated.View>
     </LinearGradient>
@@ -152,6 +152,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.primary,
     textAlign: 'center',
-    opacity: 0.7,
+    opacity: 0.8,
   },
 });

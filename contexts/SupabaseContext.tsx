@@ -1,112 +1,55 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { Session, User, AuthError } from '@supabase/supabase-js';
+import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/app/integrations/supabase/client';
 
 interface SupabaseContextType {
   session: Session | null;
   user: User | null;
   loading: boolean;
-  signUp: (email: string, password: string) => Promise<{ error: AuthError | null }>;
-  signIn: (email: string, password: string) => Promise<{ error: AuthError | null }>;
-  signInWithOtp: (email: string) => Promise<{ error: AuthError | null }>;
-  signOut: () => Promise<{ error: AuthError | null }>;
   isConfigured: boolean;
 }
 
 const SupabaseContext = createContext<SupabaseContextType | undefined>(undefined);
 
+// Hardcoded user for avelezsanti - no authentication required
+const HARDCODED_USER_EMAIL = 'avelezsanti@example.com';
+const HARDCODED_USER_ID = '00000000-0000-0000-0000-000000000001'; // Mock UUID
+
 export const SupabaseProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const configured = true; // Always configured since we have hardcoded credentials
 
   useEffect(() => {
-    console.log('[SupabaseContext] Initializing...');
+    console.log('[SupabaseContext] Initializing with hardcoded user: avelezsanti');
     
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      console.log('[SupabaseContext] Initial session:', session ? 'Found' : 'Not found');
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
+    // Create a mock user object for avelezsanti
+    const mockUser: User = {
+      id: HARDCODED_USER_ID,
+      email: HARDCODED_USER_EMAIL,
+      app_metadata: {},
+      user_metadata: {},
+      aud: 'authenticated',
+      created_at: new Date().toISOString(),
+    } as User;
 
-    // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      console.log('[SupabaseContext] Auth state changed:', _event, session ? 'Session active' : 'No session');
-      setSession(session);
-      setUser(session?.user ?? null);
-    });
+    // Create a mock session
+    const mockSession: Session = {
+      access_token: 'mock-token',
+      refresh_token: 'mock-refresh-token',
+      expires_in: 3600,
+      expires_at: Date.now() + 3600000,
+      token_type: 'bearer',
+      user: mockUser,
+    } as Session;
 
-    return () => subscription.unsubscribe();
+    setUser(mockUser);
+    setSession(mockSession);
+    setLoading(false);
+
+    console.log('[SupabaseContext] Mock user and session created for avelezsanti');
   }, []);
-
-  const signUp = async (email: string, password: string) => {
-    console.log('[SupabaseContext] Signing up user:', email);
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: 'https://natively.dev/email-confirmed'
-      }
-    });
-    
-    if (error) {
-      console.error('[SupabaseContext] Sign up error:', error.message);
-    } else {
-      console.log('[SupabaseContext] Sign up successful');
-    }
-    
-    return { error };
-  };
-
-  const signIn = async (email: string, password: string) => {
-    console.log('[SupabaseContext] Signing in user:', email);
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    
-    if (error) {
-      console.error('[SupabaseContext] Sign in error:', error.message);
-    } else {
-      console.log('[SupabaseContext] Sign in successful');
-    }
-    
-    return { error };
-  };
-
-  const signInWithOtp = async (email: string) => {
-    console.log('[SupabaseContext] Sending OTP to:', email);
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-    });
-    
-    if (error) {
-      console.error('[SupabaseContext] OTP error:', error.message);
-    } else {
-      console.log('[SupabaseContext] OTP sent successfully');
-    }
-    
-    return { error };
-  };
-
-  const signOut = async () => {
-    console.log('[SupabaseContext] Signing out user');
-    const { error } = await supabase.auth.signOut();
-    
-    if (error) {
-      console.error('[SupabaseContext] Sign out error:', error.message);
-    } else {
-      console.log('[SupabaseContext] Sign out successful');
-    }
-    
-    return { error };
-  };
 
   return (
     <SupabaseContext.Provider
@@ -114,11 +57,7 @@ export const SupabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         session,
         user,
         loading,
-        signUp,
-        signIn,
-        signInWithOtp,
-        signOut,
-        isConfigured: configured,
+        isConfigured: true,
       }}
     >
       {children}
