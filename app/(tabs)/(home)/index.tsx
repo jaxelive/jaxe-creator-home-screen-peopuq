@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   Linking,
+  Alert,
 } from "react-native";
 import { colors } from "@/styles/commonStyles";
 import { IconSymbol } from "@/components/IconSymbol";
@@ -25,6 +26,9 @@ import { AnimatedProgressBar } from "@/components/AnimatedProgressBar";
 import { ChatDrawer } from "@/components/ChatDrawer";
 
 const { width } = Dimensions.get('window');
+
+// Hardcoded creator handle - no authentication needed
+const CREATOR_HANDLE = 'avelezsanti';
 
 // Region-based tier calculation function
 function getTierFromDiamonds(diamonds: number, region: string): string {
@@ -78,6 +82,17 @@ interface UserRank {
   total_creators: number;
 }
 
+interface LiveEvent {
+  id: string;
+  event_name: string;
+  language: string;
+  event_info: string;
+  event_link: string;
+  event_date: string;
+  event_hour: string;
+  region: string | null;
+}
+
 export default function HomeScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   
@@ -89,7 +104,7 @@ export default function HomeScreen() {
     Poppins_800ExtraBold,
   });
   
-  const { creator, loading, error, refetch } = useCreatorData('avelezsanti');
+  const { creator, loading, error, refetch } = useCreatorData(CREATOR_HANDLE);
   const [nextBattle, setNextBattle] = useState<any>(null);
   const [challengeProgress, setChallengeProgress] = useState<any>(null);
   const [educationProgress, setEducationProgress] = useState(0);
@@ -103,6 +118,9 @@ export default function HomeScreen() {
   const [academyCompletedAt, setAcademyCompletedAt] = useState<string | null>(null);
   const [challengeCompletedAt, setChallengeCompletedAt] = useState<string | null>(null);
   const [totalCourseVideos, setTotalCourseVideos] = useState(0);
+  const [featuredLiveEvent, setFeaturedLiveEvent] = useState<LiveEvent | null>(null);
+  const [isRegisteredForEvent, setIsRegisteredForEvent] = useState(false);
+  const [registeringEventId, setRegisteringEventId] = useState<string | null>(null);
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -119,6 +137,7 @@ export default function HomeScreen() {
     await fetchChallengeData();
     await fetchEducationData();
     await fetchTopCreators();
+    await fetchFeaturedLiveEvent();
     setRefreshing(false);
   };
 
@@ -138,8 +157,116 @@ export default function HomeScreen() {
       fetchChallengeData();
       fetchEducationData();
       fetchTopCreators();
+      fetchFeaturedLiveEvent();
     }
   }, [creator]);
+
+  const fetchFeaturedLiveEvent = async () => {
+    try {
+      console.log('[HomeScreen] Fetching featured live event...');
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const todayString = today.toISOString().split('T')[0];
+
+      // Fetch the next upcoming live event
+      const { data: eventData, error: eventError } = await supabase
+        .from('live_events')
+        .select('*')
+        .gte('event_date', todayString)
+        .order('event_date', { ascending: true })
+        .order('event_hour', { ascending: true })
+        .limit(1)
+        .single();
+
+      if (eventError) {
+        if (eventError.code !== 'PGRST116') {
+          console.error('[HomeScreen] Error fetching featured event:', eventError);
+        } else {
+          console.log('[HomeScreen] No upcoming live events found');
+        }
+        setFeaturedLiveEvent(null);
+        return;
+      }
+
+      console.log('[HomeScreen] Featured live event found:', eventData);
+      setFeaturedLiveEvent(eventData);
+
+      // Check if user is registered for this event
+      const { data: registrationData, error: registrationError } = await supabase
+        .from('live_event_registrations')
+        .select('*')
+        .eq('live_event_id', eventData.id)
+        .eq('creator_handle', CREATOR_HANDLE)
+        .single();
+
+      if (registrationError) {
+        if (registrationError.code !== 'PGRST116') {
+          console.error('[HomeScreen] Error checking registration:', registrationError);
+        }
+        setIsRegisteredForEvent(false);
+      } else {
+        console.log('[HomeScreen] User is registered for event');
+        setIsRegisteredForEvent(true);
+      }
+    } catch (error: any) {
+      console.error('[HomeScreen] Unexpected error fetching featured event:', error);
+    }
+  };
+
+  const handleRegisterForEvent = async (eventId: string) => {
+    if (registeringEventId) return;
+
+    try {
+      console.log('[HomeScreen] Registering for event:', eventId);
+      setRegisteringEventId(eventId);
+
+      const { error } = await supabase
+        .from('live_event_registrations')
+        .insert({
+          live_event_id: eventId,
+          creator_handle: CREATOR_HANDLE,
+        });
+
+      if (error) {
+        console.error('[HomeScreen] Error registering for event:', error);
+        Alert.alert('Error', 'Failed to register for the event. Please try again.');
+        return;
+      }
+
+      setIsRegisteredForEvent(true);
+      console.log('[HomeScreen] Successfully registered for event');
+      Alert.alert('Success', 'You have been registered for this event. You can now join the event!');
+    } catch (error: any) {
+      console.error('[HomeScreen] Exception during registration:', error);
+      Alert.alert('Error', 'An unexpected error occurred. Please try again.');
+    } finally {
+      setRegisteringEventId(null);
+    }
+  };
+
+  const handleJoinEvent = async (event: LiveEvent) => {
+    if (!event.event_link) {
+      Alert.alert('Error', 'Event link not available yet.');
+      return;
+    }
+
+    try {
+      console.log('[HomeScreen] Opening event link:', event.event_link);
+      await Linking.openURL(event.event_link);
+    } catch (error) {
+      console.error('[HomeScreen] Error opening link:', error);
+      Alert.alert('Error', 'Failed to open event link.');
+    }
+  };
+
+  const formatEventDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  };
 
   const fetchBattleData = async () => {
     if (!creator) return;
@@ -658,6 +785,122 @@ export default function HomeScreen() {
                   color="#FFFFFF" 
                 />
               </TouchableOpacity>
+
+              {/* FEATURED UPCOMING LIVE EVENT CARD - POSITIONED ABOVE ACADEMY */}
+              {featuredLiveEvent && (
+                <ImportantCardPressable onPress={() => router.push('/(tabs)/academy')}>
+                  <View style={[styles.darkCard, styles.featuredEventCard]}>
+                    <View style={styles.featuredEventHeader}>
+                      <View style={styles.featuredEventHeaderLeft}>
+                        <IconSymbol 
+                          ios_icon_name="video.fill" 
+                          android_material_icon_name="videocam" 
+                          size={32} 
+                          color="#FF3B5C" 
+                        />
+                        <View>
+                          <Text style={styles.featuredEventLabel}>UPCOMING LIVE EVENT</Text>
+                          <Text style={styles.featuredEventTitle}>{featuredLiveEvent.event_name}</Text>
+                        </View>
+                      </View>
+                      <View style={styles.livePulseBadge}>
+                        <View style={styles.livePulse} />
+                        <Text style={styles.livePulseBadgeText}>LIVE</Text>
+                      </View>
+                    </View>
+
+                    {featuredLiveEvent.event_info && (
+                      <Text style={styles.featuredEventDescription} numberOfLines={2}>
+                        {featuredLiveEvent.event_info}
+                      </Text>
+                    )}
+
+                    <View style={styles.featuredEventDetails}>
+                      <View style={styles.featuredEventDetailItem}>
+                        <IconSymbol
+                          ios_icon_name="calendar"
+                          android_material_icon_name="calendar-today"
+                          size={18}
+                          color="#FFFFFF"
+                        />
+                        <Text style={styles.featuredEventDetailText}>
+                          {formatEventDate(featuredLiveEvent.event_date)}
+                        </Text>
+                      </View>
+                      <View style={styles.featuredEventDetailItem}>
+                        <IconSymbol
+                          ios_icon_name="clock"
+                          android_material_icon_name="access-time"
+                          size={18}
+                          color="#FFFFFF"
+                        />
+                        <Text style={styles.featuredEventDetailText}>
+                          {featuredLiveEvent.event_hour}
+                        </Text>
+                      </View>
+                      {featuredLiveEvent.language && (
+                        <View style={styles.featuredEventDetailItem}>
+                          <IconSymbol
+                            ios_icon_name="globe"
+                            android_material_icon_name="language"
+                            size={18}
+                            color="#FFFFFF"
+                          />
+                          <Text style={styles.featuredEventDetailText}>
+                            {featuredLiveEvent.language}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+
+                    {/* CTA Buttons */}
+                    <View style={styles.featuredEventButtonsContainer}>
+                      {/* Register Button */}
+                      <TouchableOpacity
+                        style={[
+                          styles.featuredRegisterButton,
+                          isRegisteredForEvent && styles.featuredRegisterButtonInactive,
+                        ]}
+                        onPress={() => handleRegisterForEvent(featuredLiveEvent.id)}
+                        disabled={isRegisteredForEvent || registeringEventId === featuredLiveEvent.id}
+                        activeOpacity={isRegisteredForEvent ? 1 : 0.7}
+                      >
+                        {registeringEventId === featuredLiveEvent.id ? (
+                          <ActivityIndicator size="small" color="#FFFFFF" />
+                        ) : (
+                          <Text style={styles.featuredRegisterButtonText}>
+                            {isRegisteredForEvent ? 'Registered' : 'Register'}
+                          </Text>
+                        )}
+                      </TouchableOpacity>
+
+                      {/* Join Event Button */}
+                      <TouchableOpacity
+                        style={[
+                          styles.featuredJoinEventButton,
+                          !isRegisteredForEvent && styles.featuredJoinEventButtonDisabled,
+                        ]}
+                        onPress={() => handleJoinEvent(featuredLiveEvent)}
+                        disabled={!isRegisteredForEvent}
+                        activeOpacity={isRegisteredForEvent ? 0.7 : 1}
+                      >
+                        <Text style={[
+                          styles.featuredJoinEventButtonText,
+                          !isRegisteredForEvent && styles.featuredJoinEventButtonTextDisabled,
+                        ]}>
+                          Join Event
+                        </Text>
+                        <IconSymbol 
+                          ios_icon_name="arrow.right" 
+                          android_material_icon_name="arrow-forward" 
+                          size={18} 
+                          color={isRegisteredForEvent ? "#FFFFFF" : "#999999"} 
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </ImportantCardPressable>
+              )}
 
               {/* 21-DAY CHALLENGE CARD - WITH VISUAL EMPHASIS */}
               {showChallenge && (
@@ -1349,6 +1592,126 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Poppins_700Bold',
     color: '#FFFFFF',
+  },
+
+  // FEATURED LIVE EVENT CARD - VISUALLY DISTINCT
+  featuredEventCard: {
+    backgroundColor: '#1F1F1F',
+    borderWidth: 3,
+    borderColor: '#FF3B5C',
+    boxShadow: '0px 12px 40px rgba(255, 59, 92, 0.4)',
+    elevation: 15,
+  },
+  featuredEventHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+  },
+  featuredEventHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  featuredEventLabel: {
+    fontSize: 10,
+    fontFamily: 'Poppins_700Bold',
+    color: '#FF3B5C',
+    letterSpacing: 1,
+    marginBottom: 4,
+  },
+  featuredEventTitle: {
+    fontSize: 22,
+    fontFamily: 'Poppins_700Bold',
+    color: '#FFFFFF',
+  },
+  livePulseBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#FF3B5C',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  livePulse: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#FFFFFF',
+  },
+  livePulseBadgeText: {
+    fontSize: 11,
+    fontFamily: 'Poppins_700Bold',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
+  featuredEventDescription: {
+    fontSize: 15,
+    fontFamily: 'Poppins_400Regular',
+    color: '#CCCCCC',
+    marginBottom: 16,
+    lineHeight: 22,
+  },
+  featuredEventDetails: {
+    gap: 12,
+    marginBottom: 20,
+  },
+  featuredEventDetailItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  featuredEventDetailText: {
+    fontSize: 16,
+    fontFamily: 'Poppins_600SemiBold',
+    color: '#FFFFFF',
+  },
+  featuredEventButtonsContainer: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  featuredRegisterButton: {
+    flex: 1,
+    backgroundColor: '#FF3B5C',
+    borderRadius: 16,
+    padding: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 56,
+  },
+  featuredRegisterButtonInactive: {
+    backgroundColor: '#555555',
+    opacity: 0.6,
+  },
+  featuredRegisterButtonText: {
+    fontSize: 16,
+    fontFamily: 'Poppins_700Bold',
+    color: '#FFFFFF',
+  },
+  featuredJoinEventButton: {
+    flex: 1,
+    backgroundColor: '#6642EF',
+    borderRadius: 16,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    minHeight: 56,
+  },
+  featuredJoinEventButtonDisabled: {
+    backgroundColor: '#333333',
+    opacity: 0.4,
+  },
+  featuredJoinEventButtonText: {
+    fontSize: 16,
+    fontFamily: 'Poppins_700Bold',
+    color: '#FFFFFF',
+  },
+  featuredJoinEventButtonTextDisabled: {
+    color: '#999999',
   },
 
   // DARK CARD STYLES
