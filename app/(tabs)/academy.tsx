@@ -243,37 +243,6 @@ export default function AcademyScreen() {
     return registrations.some(reg => reg.live_event_id === eventId);
   };
 
-  const isEventToday = (eventDate: string, eventHour: string): boolean => {
-    try {
-      // Get current date in local timezone
-      const now = new Date();
-      const currentYear = now.getFullYear();
-      const currentMonth = now.getMonth();
-      const currentDate = now.getDate();
-
-      // Parse event date (format: YYYY-MM-DD)
-      const [eventYear, eventMonth, eventDay] = eventDate.split('-').map(Number);
-
-      // Compare year, month, and day
-      const isSameDay = 
-        eventYear === currentYear &&
-        (eventMonth - 1) === currentMonth && // Month is 0-indexed in JS
-        eventDay === currentDate;
-
-      console.log('[Academy] Date comparison:', {
-        eventDate,
-        eventHour,
-        currentDate: `${currentYear}-${currentMonth + 1}-${currentDate}`,
-        isSameDay,
-      });
-
-      return isSameDay;
-    } catch (error) {
-      console.error('[Academy] Error checking event date:', error);
-      return false;
-    }
-  };
-
   const handleRegister = async (eventId: string) => {
     if (registeringEventId) return; // Prevent multiple simultaneous registrations
 
@@ -297,7 +266,7 @@ export default function AcademyScreen() {
       // Update local state
       setRegistrations(prev => [...prev, { live_event_id: eventId, creator_handle: CREATOR_HANDLE }]);
       console.log('[Academy] Successfully registered for event');
-      Alert.alert('Success', 'You have been registered for this event. The Join Event button will become active on the day of the event.');
+      Alert.alert('Success', 'You have been registered for this event. You can now join the event!');
     } catch (error: any) {
       console.error('[Academy] Exception during registration:', error);
       Alert.alert('Error', 'An unexpected error occurred. Please try again.');
@@ -454,15 +423,13 @@ export default function AcademyScreen() {
             <Text style={styles.sectionTitle}>Upcoming LIVE Events</Text>
             {liveEvents.map((event) => {
               const registered = isRegistered(event.id);
-              const eventIsToday = isEventToday(event.event_date, event.event_hour);
-              const canJoin = registered && eventIsToday;
+              const canJoin = registered; // Join button is active immediately after registration
 
               console.log('[Academy] Event button state:', {
                 eventId: event.id,
                 eventName: event.event_name,
                 eventDate: event.event_date,
                 registered,
-                eventIsToday,
                 canJoin,
               });
 
@@ -516,21 +483,6 @@ export default function AcademyScreen() {
                       </View>
                     )}
                   </View>
-
-                  {/* Status Message */}
-                  {registered && !eventIsToday && (
-                    <View style={styles.statusMessage}>
-                      <IconSymbol
-                        ios_icon_name="info.circle.fill"
-                        android_material_icon_name="info"
-                        size={16}
-                        color={colors.primary}
-                      />
-                      <Text style={styles.statusMessageText}>
-                        You're registered! Join button will be active on the event day.
-                      </Text>
-                    </View>
-                  )}
 
                   {/* Button Container */}
                   <View style={styles.eventButtonsContainer}>
@@ -927,22 +879,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: 'Poppins_500Medium',
     color: colors.text,
-  },
-  statusMessage: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: 'rgba(102, 66, 239, 0.1)',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 16,
-  },
-  statusMessageText: {
-    flex: 1,
-    fontSize: 13,
-    fontFamily: 'Poppins_500Medium',
-    color: colors.primary,
-    lineHeight: 18,
   },
   eventButtonsContainer: {
     flexDirection: 'row',
