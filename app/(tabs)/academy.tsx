@@ -45,6 +45,14 @@ interface ContentItem {
   quiz?: CourseQuiz;
 }
 
+interface Course {
+  id: string;
+  title: string;
+  description: string | null;
+  cover_image_url: string | null;
+  contentItems: ContentItem[];
+}
+
 interface VideoProgress {
   video_id: string;
   completed: boolean;
@@ -85,7 +93,8 @@ export default function AcademyScreen() {
     Poppins_700Bold,
   });
 
-  const [contentItems, setContentItems] = useState<ContentItem[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [expandedCourseId, setExpandedCourseId] = useState<string | null>(null);
   const [videoProgress, setVideoProgress] = useState<VideoProgress[]>([]);
   const [quizAttempts, setQuizAttempts] = useState<QuizAttempt[]>([]);
   const [liveEvents, setLiveEvents] = useState<LiveEvent[]>([]);
@@ -142,35 +151,60 @@ export default function AcademyScreen() {
         setRegistrations(registrationsData || []);
       }
 
-      // Fetch course content items with videos and quizzes
-      console.log('[Academy] Fetching course content...');
-      const { data: contentData, error: contentError } = await supabase
-        .from('course_content_items')
-        .select(`
-          *,
-          video:course_videos(*),
-          quiz:course_quizzes(*)
-        `)
-        .order('order_index', { ascending: true });
+      // Fetch all courses
+      console.log('[Academy] Fetching courses...');
+      const { data: coursesData, error: coursesError } = await supabase
+        .from('courses')
+        .select('*')
+        .eq('status', 'published')
+        .order('created_at', { ascending: true });
 
-      if (contentError) {
-        console.error('[Academy] Error fetching content:', contentError);
-        setError(`Content fetch error: ${contentError.message}`);
-        throw contentError;
+      if (coursesError) {
+        console.error('[Academy] Error fetching courses:', coursesError);
+        setError(`Courses fetch error: ${coursesError.message}`);
+        throw coursesError;
       }
 
-      console.log('[Academy] Content items fetched:', contentData?.length || 0);
+      console.log('[Academy] Courses fetched:', coursesData?.length || 0);
 
-      // Transform data to include video/quiz in the correct structure
-      const transformedContent = contentData?.map((item: any) => ({
-        id: item.id,
-        content_type: item.content_type,
-        order_index: item.order_index,
-        video: item.content_type === 'video' ? item.video : undefined,
-        quiz: item.content_type === 'quiz' ? item.quiz : undefined,
-      })) || [];
+      // For each course, fetch its content items
+      const coursesWithContent: Course[] = [];
+      
+      for (const course of coursesData || []) {
+        const { data: contentData, error: contentError } = await supabase
+          .from('course_content_items')
+          .select(`
+            *,
+            video:course_videos(*),
+            quiz:course_quizzes(*)
+          `)
+          .eq('course_id', course.id)
+          .order('order_index', { ascending: true });
 
-      setContentItems(transformedContent);
+        if (contentError) {
+          console.error('[Academy] Error fetching content for course:', course.id, contentError);
+          continue;
+        }
+
+        // Transform data to include video/quiz in the correct structure
+        const transformedContent = contentData?.map((item: any) => ({
+          id: item.id,
+          content_type: item.content_type,
+          order_index: item.order_index,
+          video: item.content_type === 'video' ? item.video : undefined,
+          quiz: item.content_type === 'quiz' ? item.quiz : undefined,
+        })) || [];
+
+        coursesWithContent.push({
+          id: course.id,
+          title: course.title,
+          description: course.description,
+          cover_image_url: course.cover_image_url,
+          contentItems: transformedContent,
+        });
+      }
+
+      setCourses(coursesWithContent);
 
       // Fetch video progress for this creator
       console.log('[Academy] Fetching video progress...');
@@ -299,12 +333,16 @@ export default function AcademyScreen() {
     });
   };
 
-  const isItemUnlocked = (index: number): boolean => {
+  const toggleCourse = (courseId: string) => {
+    setExpandedCourseId(expandedCourseId === courseId ? null : courseId);
+  };
+
+  const isItemUnlocked = (course: Course, index: number): boolean => {
     // First item is always unlocked
     if (index === 0) return true;
 
     // Check if previous item is completed
-    const previousItem = contentItems[index - 1];
+    const previousItem = course.contentItems[index - 1];
     if (!previousItem) return false;
 
     if (previousItem.content_type === 'video' && previousItem.video) {
@@ -334,8 +372,8 @@ export default function AcademyScreen() {
     return false;
   };
 
-  const handleItemPress = (item: ContentItem, index: number) => {
-    if (!isItemUnlocked(index)) {
+  const handleItemPress = (course: Course, item: ContentItem, index: number) => {
+    if (!isItemUnlocked(course, index)) {
       Alert.alert('Locked', 'Complete the previous item to unlock this one');
       return;
     }
@@ -359,13 +397,11 @@ export default function AcademyScreen() {
     }
   };
 
-  const completedVideos = contentItems.filter(
-    (item) => item.content_type === 'video' && isItemCompleted(item)
-  ).length;
-  const totalVideos = contentItems.filter((item) => item.content_type === 'video').length;
-  const quizCompleted = contentItems.some(
-    (item) => item.content_type === 'quiz' && isItemCompleted(item)
-  );
+  const getCourseProgress = (course: Course) => {
+    const completedItems = course.contentItems.filter(item => isItemCompleted(item)).length;
+    const totalItems = course.contentItems.length;
+    return { completed: completedItems, total: totalItems };
+  };
 
   if (loading || !fontsLoaded) {
     return (
@@ -418,20 +454,12 @@ export default function AcademyScreen() {
         )}
 
         {/* Live Events Section */}
-        {liveEvents.length > 0 ? (
-          <View style={styles.liveEventsSection}>
-            <Text style={styles.sectionTitle}>Upcoming LIVE Events</Text>
-            {liveEvents.map((event) => {
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Live Events</Text>
+          {liveEvents.length > 0 ? (
+            liveEvents.map((event) => {
               const registered = isRegistered(event.id);
-              const canJoin = registered; // Join button is active immediately after registration
-
-              console.log('[Academy] Event button state:', {
-                eventId: event.id,
-                eventName: event.event_name,
-                eventDate: event.event_date,
-                registered,
-                canJoin,
-              });
+              const canJoin = registered;
 
               return (
                 <View key={event.id} style={styles.liveEventCard}>
@@ -484,9 +512,7 @@ export default function AcademyScreen() {
                     )}
                   </View>
 
-                  {/* Button Container */}
                   <View style={styles.eventButtonsContainer}>
-                    {/* Register Button */}
                     <TouchableOpacity
                       style={[
                         styles.registerButton,
@@ -505,7 +531,6 @@ export default function AcademyScreen() {
                       )}
                     </TouchableOpacity>
 
-                    {/* Join Event Button */}
                     <TouchableOpacity
                       style={[
                         styles.joinEventButton,
@@ -525,201 +550,237 @@ export default function AcademyScreen() {
                   </View>
                 </View>
               );
-            })}
-          </View>
-        ) : (
-          <View style={styles.noEventsCard}>
-            <IconSymbol
-              ios_icon_name="calendar.badge.exclamationmark"
-              android_material_icon_name="event-busy"
-              size={48}
-              color={colors.textSecondary}
-            />
-            <Text style={styles.noEventsTitle}>No Upcoming Events</Text>
-            <Text style={styles.noEventsText}>
-              Check back soon for new live events!
-            </Text>
-          </View>
-        )}
-
-        {/* Progress Card */}
-        <View style={styles.progressCard}>
-          <View style={styles.progressRow}>
-            <View style={styles.progressItem}>
-              <Text style={styles.progressLabel}>Videos</Text>
-              <Text style={styles.progressValue}>
-                {completedVideos}/{totalVideos}
+            })
+          ) : (
+            <View style={styles.noEventsCard}>
+              <IconSymbol
+                ios_icon_name="calendar.badge.exclamationmark"
+                android_material_icon_name="event-busy"
+                size={48}
+                color={colors.textSecondary}
+              />
+              <Text style={styles.noEventsTitle}>No Upcoming Events</Text>
+              <Text style={styles.noEventsText}>
+                Check back soon for new live events!
               </Text>
             </View>
-            <View style={styles.progressDivider} />
-            <View style={styles.progressItem}>
-              <Text style={styles.progressLabel}>Quiz</Text>
-              <Text style={styles.progressValue}>{quizCompleted ? '✓' : '—'}</Text>
-            </View>
-          </View>
-          <View style={styles.progressBar}>
-            <View
-              style={[
-                styles.progressFill,
-                {
-                  width: `${
-                    ((completedVideos + (quizCompleted ? 1 : 0)) /
-                      (totalVideos + 1)) *
-                    100
-                  }%`,
-                },
-              ]}
-            />
-          </View>
+          )}
         </View>
 
-        {/* Content List - Videos with Thumbnails */}
-        <View style={styles.contentList}>
-          {contentItems.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>No content available yet</Text>
-            </View>
-          ) : (
-            contentItems.map((item, index) => {
-              const isUnlocked = isItemUnlocked(index);
-              const isCompleted = isItemCompleted(item);
+        {/* Courses Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Courses</Text>
+          {courses.length > 0 ? (
+            courses.map((course) => {
+              const isExpanded = expandedCourseId === course.id;
+              const progress = getCourseProgress(course);
+              const progressPercentage = progress.total > 0 
+                ? (progress.completed / progress.total) * 100 
+                : 0;
 
               return (
-                <TouchableOpacity
-                  key={item.id}
-                  style={[
-                    styles.contentCard,
-                    isCompleted && styles.contentCardCompleted,
-                    !isUnlocked && styles.contentCardLocked,
-                  ]}
-                  onPress={() => handleItemPress(item, index)}
-                  disabled={!isUnlocked}
-                  activeOpacity={0.7}
-                >
-                  {/* Video Thumbnail */}
-                  {item.content_type === 'video' && item.video && (
-                    <View style={styles.videoThumbnailContainer}>
-                      {item.video.thumbnail_url ? (
-                        <Image
-                          source={{ uri: item.video.thumbnail_url }}
-                          style={styles.videoThumbnailImage}
-                        />
-                      ) : (
-                        <View style={styles.videoThumbnailPlaceholder}>
-                          <IconSymbol
-                            ios_icon_name="play.circle.fill"
-                            android_material_icon_name="play-circle"
-                            size={40}
-                            color={isUnlocked ? colors.primary : '#707070'}
-                          />
-                        </View>
-                      )}
-                      {!isUnlocked && (
-                        <View style={styles.lockedOverlay}>
-                          <IconSymbol
-                            ios_icon_name="lock.fill"
-                            android_material_icon_name="lock"
-                            size={24}
-                            color="#FFFFFF"
-                          />
-                        </View>
-                      )}
-                      {isCompleted && (
-                        <View style={styles.completedBadge}>
-                          <IconSymbol
-                            ios_icon_name="checkmark.circle.fill"
-                            android_material_icon_name="check-circle"
-                            size={24}
-                            color={colors.success}
-                          />
-                        </View>
-                      )}
+                <View key={course.id} style={styles.courseContainer}>
+                  {/* Course Header - Clickable */}
+                  <TouchableOpacity
+                    style={styles.courseHeader}
+                    onPress={() => toggleCourse(course.id)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.courseHeaderLeft}>
+                      <IconSymbol
+                        ios_icon_name="book.fill"
+                        android_material_icon_name="book"
+                        size={24}
+                        color={colors.primary}
+                      />
+                      <View style={styles.courseHeaderText}>
+                        <Text style={styles.courseTitle}>{course.title}</Text>
+                        <Text style={styles.courseProgress}>
+                          {progress.completed} / {progress.total} completed
+                        </Text>
+                      </View>
                     </View>
-                  )}
+                    <IconSymbol
+                      ios_icon_name={isExpanded ? "chevron.up" : "chevron.down"}
+                      android_material_icon_name={isExpanded ? "expand-less" : "expand-more"}
+                      size={24}
+                      color={colors.text}
+                    />
+                  </TouchableOpacity>
 
-                  {/* Quiz Icon */}
-                  {item.content_type === 'quiz' && (
-                    <View style={styles.contentIcon}>
-                      {isCompleted ? (
-                        <IconSymbol
-                          ios_icon_name="checkmark.circle.fill"
-                          android_material_icon_name="check-circle"
-                          size={40}
-                          color={colors.success}
-                        />
-                      ) : !isUnlocked ? (
-                        <IconSymbol
-                          ios_icon_name="lock.fill"
-                          android_material_icon_name="lock"
-                          size={32}
-                          color="#707070"
-                        />
-                      ) : (
-                        <IconSymbol
-                          ios_icon_name="doc.text.fill"
-                          android_material_icon_name="quiz"
-                          size={40}
-                          color={colors.primary}
-                        />
-                      )}
-                    </View>
-                  )}
-
-                  <View style={styles.contentInfo}>
-                    <View style={styles.contentHeader}>
-                      <Text style={[styles.contentTitle, !isUnlocked && styles.contentTitleLocked]}>
-                        {item.content_type === 'video'
-                          ? `${index + 1}. ${item.video?.title}`
-                          : item.quiz?.title}
-                      </Text>
-                      {item.content_type === 'quiz' && item.quiz?.is_required && (
-                        <View style={styles.requiredBadge}>
-                          <Text style={styles.requiredBadgeText}>REQUIRED</Text>
-                        </View>
-                      )}
-                    </View>
-                    {item.content_type === 'video' && item.video?.description && (
-                      <Text
-                        style={[
-                          styles.contentDescription,
-                          !isUnlocked && styles.contentDescriptionLocked,
-                        ]}
-                        numberOfLines={2}
-                      >
-                        {item.video.description}
-                      </Text>
-                    )}
-                    {item.content_type === 'video' && item.video?.duration_seconds && (
-                      <Text style={styles.videoDuration}>
-                        {Math.floor(item.video.duration_seconds / 60)} min
-                      </Text>
-                    )}
-                    {item.content_type === 'quiz' && item.quiz?.description && (
-                      <Text
-                        style={[
-                          styles.contentDescription,
-                          !isUnlocked && styles.contentDescriptionLocked,
-                        ]}
-                        numberOfLines={2}
-                      >
-                        {item.quiz.description}
-                      </Text>
-                    )}
+                  {/* Progress Bar */}
+                  <View style={styles.courseProgressBar}>
+                    <View
+                      style={[
+                        styles.courseProgressFill,
+                        { width: `${progressPercentage}%` },
+                      ]}
+                    />
                   </View>
 
-                  {isUnlocked && !isCompleted && (
-                    <View style={styles.contentArrow}>
-                      <IconSymbol
-                        ios_icon_name="chevron.right"
-                        android_material_icon_name="chevron-right"
-                        size={20}
-                        color="#A0A0A0"
-                      />
+                  {/* Course Description */}
+                  {course.description && isExpanded && (
+                    <Text style={styles.courseDescription}>{course.description}</Text>
+                  )}
+
+                  {/* Course Content - Expandable */}
+                  {isExpanded && (
+                    <View style={styles.courseContent}>
+                      {course.contentItems.length === 0 ? (
+                        <View style={styles.emptyState}>
+                          <Text style={styles.emptyStateText}>No content available yet</Text>
+                        </View>
+                      ) : (
+                        course.contentItems.map((item, index) => {
+                          const isUnlocked = isItemUnlocked(course, index);
+                          const isCompleted = isItemCompleted(item);
+
+                          return (
+                            <TouchableOpacity
+                              key={item.id}
+                              style={[
+                                styles.contentCard,
+                                isCompleted && styles.contentCardCompleted,
+                                !isUnlocked && styles.contentCardLocked,
+                              ]}
+                              onPress={() => handleItemPress(course, item, index)}
+                              disabled={!isUnlocked}
+                              activeOpacity={0.7}
+                            >
+                              {/* Video Thumbnail */}
+                              {item.content_type === 'video' && item.video && (
+                                <View style={styles.videoThumbnailContainer}>
+                                  {item.video.thumbnail_url ? (
+                                    <Image
+                                      source={{ uri: item.video.thumbnail_url }}
+                                      style={styles.videoThumbnailImage}
+                                    />
+                                  ) : (
+                                    <View style={styles.videoThumbnailPlaceholder}>
+                                      <IconSymbol
+                                        ios_icon_name="play.circle.fill"
+                                        android_material_icon_name="play-circle"
+                                        size={40}
+                                        color={isUnlocked ? colors.primary : '#707070'}
+                                      />
+                                    </View>
+                                  )}
+                                  {!isUnlocked && (
+                                    <View style={styles.lockedOverlay}>
+                                      <IconSymbol
+                                        ios_icon_name="lock.fill"
+                                        android_material_icon_name="lock"
+                                        size={24}
+                                        color="#FFFFFF"
+                                      />
+                                    </View>
+                                  )}
+                                  {isCompleted && (
+                                    <View style={styles.completedBadge}>
+                                      <IconSymbol
+                                        ios_icon_name="checkmark.circle.fill"
+                                        android_material_icon_name="check-circle"
+                                        size={24}
+                                        color={colors.success}
+                                      />
+                                    </View>
+                                  )}
+                                </View>
+                              )}
+
+                              {/* Quiz Icon */}
+                              {item.content_type === 'quiz' && (
+                                <View style={styles.contentIcon}>
+                                  {isCompleted ? (
+                                    <IconSymbol
+                                      ios_icon_name="checkmark.circle.fill"
+                                      android_material_icon_name="check-circle"
+                                      size={40}
+                                      color={colors.success}
+                                    />
+                                  ) : !isUnlocked ? (
+                                    <IconSymbol
+                                      ios_icon_name="lock.fill"
+                                      android_material_icon_name="lock"
+                                      size={32}
+                                      color="#707070"
+                                    />
+                                  ) : (
+                                    <IconSymbol
+                                      ios_icon_name="doc.text.fill"
+                                      android_material_icon_name="quiz"
+                                      size={40}
+                                      color={colors.primary}
+                                    />
+                                  )}
+                                </View>
+                              )}
+
+                              <View style={styles.contentInfo}>
+                                <View style={styles.contentHeader}>
+                                  <Text style={[styles.contentTitle, !isUnlocked && styles.contentTitleLocked]}>
+                                    {item.content_type === 'video'
+                                      ? `${index + 1}. ${item.video?.title}`
+                                      : item.quiz?.title}
+                                  </Text>
+                                  {item.content_type === 'quiz' && item.quiz?.is_required && (
+                                    <View style={styles.requiredBadge}>
+                                      <Text style={styles.requiredBadgeText}>REQUIRED</Text>
+                                    </View>
+                                  )}
+                                </View>
+                                {item.content_type === 'video' && item.video?.description && (
+                                  <Text
+                                    style={[
+                                      styles.contentDescription,
+                                      !isUnlocked && styles.contentDescriptionLocked,
+                                    ]}
+                                    numberOfLines={2}
+                                  >
+                                    {item.video.description}
+                                  </Text>
+                                )}
+                                {item.content_type === 'video' && item.video?.duration_seconds && (
+                                  <Text style={styles.videoDuration}>
+                                    {Math.floor(item.video.duration_seconds / 60)} min
+                                  </Text>
+                                )}
+                                {item.content_type === 'quiz' && item.quiz?.description && (
+                                  <Text
+                                    style={[
+                                      styles.contentDescription,
+                                      !isUnlocked && styles.contentDescriptionLocked,
+                                    ]}
+                                    numberOfLines={2}
+                                  >
+                                    {item.quiz.description}
+                                  </Text>
+                                )}
+                              </View>
+
+                              {isUnlocked && !isCompleted && (
+                                <View style={styles.contentArrow}>
+                                  <IconSymbol
+                                    ios_icon_name="chevron.right"
+                                    android_material_icon_name="chevron-right"
+                                    size={20}
+                                    color="#A0A0A0"
+                                  />
+                                </View>
+                              )}
+                            </TouchableOpacity>
+                          );
+                        })
+                      )}
                     </View>
                   )}
-                </TouchableOpacity>
+                </View>
               );
             })
+          ) : (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>No courses available yet</Text>
+            </View>
           )}
         </View>
 
@@ -732,7 +793,7 @@ export default function AcademyScreen() {
             color={colors.primary}
           />
           <Text style={styles.infoText}>
-            Complete all videos in order to unlock the quiz. You must pass the quiz to complete the Academy.
+            Complete all videos in order to unlock quizzes. You must pass required quizzes to complete each course.
           </Text>
         </View>
       </ScrollView>
@@ -792,14 +853,14 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
   },
+  section: {
+    marginBottom: 32,
+  },
   sectionTitle: {
-    fontSize: 22,
+    fontSize: 24,
     fontFamily: 'Poppins_700Bold',
     color: colors.text,
     marginBottom: 16,
-  },
-  liveEventsSection: {
-    marginBottom: 24,
   },
   liveEventCard: {
     backgroundColor: colors.backgroundAlt,
@@ -818,7 +879,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.backgroundAlt,
     borderRadius: 24,
     padding: 32,
-    marginBottom: 24,
     alignItems: 'center',
   },
   noEventsTitle: {
@@ -923,58 +983,67 @@ const styles = StyleSheet.create({
   joinEventButtonTextDisabled: {
     color: '#999999',
   },
-  progressCard: {
+  courseContainer: {
     backgroundColor: colors.backgroundAlt,
-    borderRadius: 24,
-    padding: 24,
-    marginBottom: 24,
-  },
-  progressRow: {
-    flexDirection: 'row',
+    borderRadius: 20,
+    padding: 20,
     marginBottom: 16,
   },
-  progressItem: {
-    flex: 1,
+  courseHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 12,
   },
-  progressDivider: {
-    width: 1,
-    backgroundColor: colors.border,
-    marginHorizontal: 16,
+  courseHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
   },
-  progressLabel: {
+  courseHeaderText: {
+    flex: 1,
+  },
+  courseTitle: {
+    fontSize: 20,
+    fontFamily: 'Poppins_700Bold',
+    color: colors.text,
+    marginBottom: 4,
+  },
+  courseProgress: {
     fontSize: 14,
     fontFamily: 'Poppins_500Medium',
     color: colors.textSecondary,
-    marginBottom: 4,
   },
-  progressValue: {
-    fontSize: 24,
-    fontFamily: 'Poppins_700Bold',
-    color: colors.primary,
-  },
-  progressBar: {
-    height: 12,
+  courseProgressBar: {
+    height: 8,
     backgroundColor: colors.grey,
-    borderRadius: 12,
+    borderRadius: 8,
     overflow: 'hidden',
+    marginBottom: 12,
   },
-  progressFill: {
+  courseProgressFill: {
     height: '100%',
     backgroundColor: colors.primary,
-    borderRadius: 12,
+    borderRadius: 8,
   },
-  contentList: {
+  courseDescription: {
+    fontSize: 14,
+    fontFamily: 'Poppins_400Regular',
+    color: colors.textSecondary,
+    lineHeight: 20,
+    marginBottom: 16,
+  },
+  courseContent: {
     gap: 12,
-    marginBottom: 20,
   },
   contentCard: {
     flexDirection: 'row',
-    backgroundColor: colors.backgroundAlt,
-    borderRadius: 20,
-    padding: 16,
+    backgroundColor: colors.background,
+    borderRadius: 16,
+    padding: 12,
     alignItems: 'center',
-    gap: 16,
+    gap: 12,
   },
   contentCardCompleted: {
     backgroundColor: 'rgba(102, 66, 239, 0.1)',
@@ -985,8 +1054,8 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   videoThumbnailContainer: {
-    width: 120,
-    height: 80,
+    width: 100,
+    height: 70,
     borderRadius: 12,
     overflow: 'hidden',
     position: 'relative',
@@ -1014,8 +1083,8 @@ const styles = StyleSheet.create({
   },
   completedBadge: {
     position: 'absolute',
-    top: 8,
-    right: 8,
+    top: 6,
+    right: 6,
   },
   contentIcon: {
     width: 48,
@@ -1033,8 +1102,8 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   contentTitle: {
-    fontSize: 16,
-    fontFamily: 'Poppins_700Bold',
+    fontSize: 15,
+    fontFamily: 'Poppins_600SemiBold',
     color: colors.text,
     flex: 1,
   },
@@ -1054,10 +1123,10 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   contentDescription: {
-    fontSize: 14,
+    fontSize: 13,
     fontFamily: 'Poppins_400Regular',
     color: colors.textSecondary,
-    lineHeight: 20,
+    lineHeight: 18,
     marginBottom: 4,
   },
   contentDescriptionLocked: {
