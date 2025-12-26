@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -50,13 +50,17 @@ export default function OnboardingScreen() {
 
   const currentSlide = slides[currentIndex];
   const currentMediaUrl = hasValidMediaUrl(currentSlide?.media_url) ? currentSlide.media_url : null;
+  const hasVideo = currentSlide?.media_type === 'video' && currentMediaUrl;
 
+  // Only create video player if we have a valid video URL
   const videoPlayer = useVideoPlayer(
-    currentMediaUrl || '',
+    hasVideo ? currentMediaUrl! : 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
     (player) => {
-      if (currentSlide?.media_type === 'video' && currentMediaUrl) {
+      if (hasVideo) {
         player.loop = true;
         player.play();
+      } else {
+        player.pause();
       }
     }
   );
@@ -71,6 +75,8 @@ export default function OnboardingScreen() {
     if (currentSlide?.media_type === 'video' && currentMediaUrl) {
       videoPlayer.replace(currentMediaUrl);
       videoPlayer.play();
+    } else {
+      videoPlayer.pause();
     }
   }, [currentIndex, slides]);
 
