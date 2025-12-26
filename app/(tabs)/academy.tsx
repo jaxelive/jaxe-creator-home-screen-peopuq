@@ -498,25 +498,12 @@ export default function AcademyScreen() {
                         ios_icon_name="clock"
                         android_material_icon_name="access-time"
                         size={16}
-                        color={colors.textSecondary}
+                        color="#999999"
                       />
-                      <Text style={styles.liveEventDetailText}>
+                      <Text style={styles.liveEventTimezoneText}>
                         {formatTo12Hour(event.event_hour)}
                       </Text>
                     </View>
-                    {event.region && (
-                      <View style={styles.liveEventDetailItem}>
-                        <IconSymbol
-                          ios_icon_name="globe"
-                          android_material_icon_name="public"
-                          size={16}
-                          color="#999999"
-                        />
-                        <Text style={styles.liveEventTimezoneText}>
-                          {event.region}
-                        </Text>
-                      </View>
-                    )}
                     {event.language && (
                       <View style={styles.liveEventDetailItem}>
                         <IconSymbol
