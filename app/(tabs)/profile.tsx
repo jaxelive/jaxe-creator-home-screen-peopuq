@@ -358,6 +358,32 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        {/* Settings Section */}
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Settings</Text>
+          
+          <TouchableOpacity
+            style={styles.settingRow}
+            onPress={() => router.push('/onboarding' as any)}
+          >
+            <View style={styles.settingLeft}>
+              <IconSymbol
+                ios_icon_name="book.fill"
+                android_material_icon_name="menu_book"
+                size={24}
+                color={colors.primary}
+              />
+              <Text style={styles.settingLabel}>View Onboarding</Text>
+            </View>
+            <IconSymbol
+              ios_icon_name="chevron.right"
+              android_material_icon_name="chevron_right"
+              size={20}
+              color={colors.textSecondary}
+            />
+          </TouchableOpacity>
+        </View>
+
         {/* Manager Section */}
         {!creator.assigned_manager_id && (
           <TouchableOpacity
@@ -581,6 +607,22 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 20,
     fontWeight: '700',
+    color: colors.text,
+  },
+  settingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+  },
+  settingLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  settingLabel: {
+    fontSize: 16,
+    fontWeight: '500',
     color: colors.text,
   },
   requestButton: {

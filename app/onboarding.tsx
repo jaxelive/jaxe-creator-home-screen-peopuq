@@ -1,97 +1,206 @@
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
-  TouchableOpacity,
   StyleSheet,
   Dimensions,
+  TouchableOpacity,
+  Image,
   Alert,
   ActivityIndicator,
-  Image,
+  ScrollView,
+  Platform,
 } from 'react-native';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors } from '@/styles/commonStyles';
-import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '@/app/integrations/supabase/client';
-import { useSupabase } from '@/contexts/SupabaseContext';
+import * as ImagePicker from 'expo-image-picker';
+import * as Notifications from 'expo-notifications';
 import { VideoView, useVideoPlayer } from 'expo-video';
+import { IconSymbol } from '@/components/IconSymbol';
+import { useCreatorData } from '@/hooks/useCreatorData';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
-const WELCOME_VIDEO_URL = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
-
-const ONBOARDING_SLIDES = [
-  {
-    emoji: '🏠',
-    title: 'Your Homepage',
-    description: 'Track your diamonds, graduation progress, and all your stats in one beautiful dashboard.',
-  },
-  {
-    emoji: '💎',
-    title: 'Diamonds & Graduation',
-    description: 'Earn diamonds and level up from Rookie to Silver, Gold, and Elite status.',
-  },
-  {
-    emoji: '⚔️',
-    title: 'Battles',
-    description: 'Compete with other creators in exciting live battles and climb the leaderboard.',
-  },
-  {
-    emoji: '💰',
-    title: 'Bonuses',
-    description: 'Unlock monthly bonuses based on your performance and diamond count.',
-  },
-  {
-    emoji: '📚',
-    title: 'Learning Hub',
-    description: 'Complete the 21-Day Challenge and UR Education to master your craft.',
-  },
-  {
-    emoji: '✨',
-    title: 'AI Flyers',
-    description: 'Create stunning promotional flyers with AI in seconds.',
-  },
-  {
-    emoji: '🚀',
-    title: 'Ready to Go!',
-    description: 'Level up your creator journey with JAXE One.',
-  },
-];
+interface OnboardingSlide {
+  id: string;
+  title: string;
+  content: string | null;
+  media_type: 'image' | 'video' | 'none' | null;
+  media_url: string | null;
+  slide_order: number;
+  slide_type: 'default' | 'notification_request' | 'profile_upload';
+}
 
 export default function OnboardingScreen() {
-  const { user } = useSupabase();
-  const [step, setStep] = useState(1);
+  const { creator, refetch } = useCreatorData();
+  const [slides, setSlides] = useState<OnboardingSlide[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [loading, setLoading] = useState(true);
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [videoWatchProgress, setVideoWatchProgress] = useState(0);
-  const [slideIndex, setSlideIndex] = useState(0);
+  const [notificationStatus, setNotificationStatus] = useState<'granted' | 'denied' | 'undetermined'>('undetermined');
 
-  const videoRef = useRef<any>(null);
-  const player = useVideoPlayer(WELCOME_VIDEO_URL, (player) => {
-    player.loop = false;
-    player.play();
-  });
+  const videoPlayer = useVideoPlayer(
+    slides[currentIndex]?.media_url || '',
+    (player) => {
+      if (slides[currentIndex]?.media_type === 'video' && slides[currentIndex]?.media_url) {
+        player.loop = true;
+        player.play();
+      }
+    }
+  );
 
   useEffect(() => {
-    if (step === 2 && player) {
-      const interval = setInterval(() => {
-        if (player.currentTime && player.duration) {
-          const progress = (player.currentTime / player.duration) * 100;
-          setVideoWatchProgress(progress);
-        }
-      }, 500);
+    fetchOnboardingSlides();
+    checkNotificationPermissions();
+  }, []);
 
-      return () => clearInterval(interval);
+  useEffect(() => {
+    // Update video player when slide changes
+    if (slides[currentIndex]?.media_type === 'video' && slides[currentIndex]?.media_url) {
+      videoPlayer.replace(slides[currentIndex].media_url!);
+      videoPlayer.play();
     }
-  }, [step, player]);
+  }, [currentIndex, slides]);
+
+  const checkNotificationPermissions = async () => {
+    const { status } = await Notifications.getPermissionsAsync();
+    setNotificationStatus(status);
+  };
+
+  const fetchOnboardingSlides = async () => {
+    try {
+      setLoading(true);
+
+      // Fetch active onboarding
+      const { data: onboardingData, error: onboardingError } = await supabase
+        .from('onboardings')
+        .select('id')
+        .eq('is_active', true)
+        .single();
+
+      if (onboardingError) {
+        console.error('[Onboarding] Error fetching onboarding:', onboardingError);
+        Alert.alert('Error', 'Failed to load onboarding content.');
+        return;
+      }
+
+      // Fetch slides for this onboarding
+      const { data: slidesData, error: slidesError } = await supabase
+        .from('onboarding_slides')
+        .select('*')
+        .eq('onboarding_id', onboardingData.id)
+        .order('slide_order', { ascending: true });
+
+      if (slidesError) {
+        console.error('[Onboarding] Error fetching slides:', slidesError);
+        Alert.alert('Error', 'Failed to load onboarding slides.');
+        return;
+      }
+
+      setSlides(slidesData as OnboardingSlide[]);
+    } catch (error) {
+      console.error('[Onboarding] Unexpected error:', error);
+      Alert.alert('Error', 'An unexpected error occurred.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleNext = async () => {
+    const currentSlide = slides[currentIndex];
+
+    // Handle interactive slides
+    if (currentSlide.slide_type === 'notification_request') {
+      if (notificationStatus !== 'granted') {
+        Alert.alert(
+          'Enable Notifications',
+          'Please enable notifications to continue and stay updated on important announcements.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+    }
+
+    if (currentSlide.slide_type === 'profile_upload') {
+      if (!profileImage && !creator?.avatar_url && !creator?.profile_picture_url) {
+        Alert.alert(
+          'Profile Photo Required',
+          'Please upload a profile photo to continue.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
+      // Upload profile picture if selected
+      if (profileImage && uploading === false) {
+        await uploadProfilePicture();
+      }
+    }
+
+    // Move to next slide or finish
+    if (currentIndex < slides.length - 1) {
+      setCurrentIndex(currentIndex + 1);
+    } else {
+      // Onboarding complete
+      router.replace('/(tabs)/(home)/');
+    }
+  };
+
+  const handleBack = () => {
+    if (currentIndex > 0) {
+      setCurrentIndex(currentIndex - 1);
+    }
+  };
+
+  const handleSkip = () => {
+    Alert.alert(
+      'Skip Onboarding?',
+      'Are you sure you want to skip the onboarding? You can always access it later from Settings.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Skip', style: 'destructive', onPress: () => router.replace('/(tabs)/(home)/') },
+      ]
+    );
+  };
+
+  const requestNotificationPermissions = async () => {
+    try {
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+
+      setNotificationStatus(finalStatus);
+
+      if (finalStatus === 'granted') {
+        Alert.alert('Success', 'Notifications enabled! You\'ll stay updated on everything important.');
+      } else {
+        Alert.alert(
+          'Notifications Disabled',
+          'You can enable notifications later in your device settings.'
+        );
+      }
+    } catch (error) {
+      console.error('[Onboarding] Error requesting notifications:', error);
+      Alert.alert('Error', 'Failed to request notification permissions.');
+    }
+  };
 
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    
+
     if (status !== 'granted') {
-      Alert.alert('Permission Required', 'We need camera roll permissions to upload your profile picture.');
+      Alert.alert(
+        'Permission Required',
+        'We need camera roll permissions to upload your profile picture.'
+      );
       return;
     }
 
@@ -108,30 +217,32 @@ export default function OnboardingScreen() {
   };
 
   const uploadProfilePicture = async () => {
-    if (!profileImage || !user) {
-      Alert.alert('Error', 'Please select a profile picture first.');
+    if (!profileImage || !creator) {
       return;
     }
 
     setUploading(true);
 
     try {
-      // In a real app, you would upload to Supabase Storage
-      // For now, we'll just update the creators table with the URI
+      // In a production app, you would upload to Supabase Storage
+      // For now, we'll update the creators table with the URI
       const { error } = await supabase
         .from('creators')
-        .update({ avatar_url: profileImage })
-        .eq('email', user.email);
+        .update({ 
+          avatar_url: profileImage,
+          profile_picture_url: profileImage 
+        })
+        .eq('id', creator.id);
 
       if (error) {
         console.error('[Onboarding] Upload error:', error);
         Alert.alert('Error', 'Failed to upload profile picture. Please try again.');
-        setUploading(false);
         return;
       }
 
-      setStep(2);
-    } catch (error: any) {
+      await refetch();
+      Alert.alert('Success', 'Profile picture uploaded successfully!');
+    } catch (error) {
       console.error('[Onboarding] Unexpected error:', error);
       Alert.alert('Error', 'Something went wrong. Please try again.');
     } finally {
@@ -139,206 +250,353 @@ export default function OnboardingScreen() {
     }
   };
 
-  const handleVideoComplete = () => {
-    if (videoWatchProgress >= 75) {
-      setStep(3);
-    } else {
-      Alert.alert(
-        'Almost There!',
-        'Please watch at least 75% of the video to continue.',
-        [{ text: 'OK' }]
-      );
-    }
-  };
-
-  const handleNextSlide = () => {
-    if (slideIndex < ONBOARDING_SLIDES.length - 1) {
-      setSlideIndex(slideIndex + 1);
-    } else {
-      router.replace('/(tabs)/(home)/');
-    }
-  };
-
-  const handlePrevSlide = () => {
-    if (slideIndex > 0) {
-      setSlideIndex(slideIndex - 1);
-    }
-  };
-
-  if (step === 1) {
+  if (loading) {
     return (
-      <LinearGradient
-        colors={['#FFFFFF', '#FAF5FF']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.container}
-      >
-        <View style={styles.content}>
-          <Text style={styles.stepTitle}>Step 1: Profile Picture</Text>
-          <Text style={styles.stepSubtitle}>Let's add a photo so everyone knows it's you!</Text>
-
-          <TouchableOpacity style={styles.avatarContainer} onPress={pickImage}>
-            {profileImage ? (
-              <Image source={{ uri: profileImage }} style={styles.avatar} />
-            ) : (
-              <View style={styles.avatarPlaceholder}>
-                <Text style={styles.avatarPlaceholderText}>📸</Text>
-                <Text style={styles.avatarPlaceholderLabel}>Tap to upload</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.button, !profileImage && styles.buttonDisabled]}
-            onPress={uploadProfilePicture}
-            disabled={!profileImage || uploading}
-          >
-            <LinearGradient
-              colors={profileImage ? colors.gradientPurple : ['#E5E7EB', '#E5E7EB']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.buttonGradient}
-            >
-              {uploading ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <Text style={styles.buttonText}>Continue</Text>
-              )}
-            </LinearGradient>
-          </TouchableOpacity>
-        </View>
-      </LinearGradient>
-    );
-  }
-
-  if (step === 2) {
-    return (
-      <View style={styles.container}>
-        <View style={styles.videoContainer}>
-          <VideoView
-            ref={videoRef}
-            style={styles.video}
-            player={player}
-            allowsFullscreen
-            allowsPictureInPicture
-          />
-        </View>
-
-        <View style={styles.videoControls}>
-          <View style={styles.progressBarContainer}>
-            <View style={[styles.progressBar, { width: `${videoWatchProgress}%` }]} />
-          </View>
-          <Text style={styles.progressText}>
-            {videoWatchProgress >= 75 ? '✅ Ready to continue!' : `${Math.round(videoWatchProgress)}% watched (need 75%)`}
-          </Text>
-          
-          <TouchableOpacity
-            style={[styles.button, videoWatchProgress < 75 && styles.buttonDisabled]}
-            onPress={handleVideoComplete}
-            disabled={videoWatchProgress < 75}
-          >
-            <LinearGradient
-              colors={videoWatchProgress >= 75 ? colors.gradientPurple : ['#E5E7EB', '#E5E7EB']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.buttonGradient}
-            >
-              <Text style={styles.buttonText}>Continue</Text>
-            </LinearGradient>
-          </TouchableOpacity>
-        </View>
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.loadingText}>Loading onboarding...</Text>
       </View>
     );
   }
 
-  const currentSlide = ONBOARDING_SLIDES[slideIndex];
+  if (slides.length === 0) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={styles.errorText}>No onboarding content available</Text>
+        <TouchableOpacity style={styles.button} onPress={() => router.back()}>
+          <Text style={styles.buttonText}>Go Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  const currentSlide = slides[currentIndex];
 
   return (
-    <LinearGradient
-      colors={['#FFFFFF', '#FAF5FF']}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      style={styles.container}
-    >
-      <View style={styles.slideContent}>
-        <Text style={styles.slideEmoji}>{currentSlide.emoji}</Text>
-        <Text style={styles.slideTitle}>{currentSlide.title}</Text>
-        <Text style={styles.slideDescription}>{currentSlide.description}</Text>
+    <View style={styles.container}>
+      {/* Skip Button */}
+      <TouchableOpacity style={styles.skipButton} onPress={handleSkip}>
+        <Text style={styles.skipButtonText}>Skip</Text>
+      </TouchableOpacity>
 
-        <View style={styles.slideIndicators}>
-          {ONBOARDING_SLIDES.map((_, index) => (
+      {/* Slide Content */}
+      <ScrollView 
+        contentContainerStyle={styles.slideContainer}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Media Section */}
+        {currentSlide.media_type === 'video' && currentSlide.media_url ? (
+          <View style={styles.mediaContainer}>
+            <VideoView
+              style={styles.video}
+              player={videoPlayer}
+              allowsFullscreen={false}
+              allowsPictureInPicture={false}
+            />
+          </View>
+        ) : currentSlide.media_type === 'image' && currentSlide.media_url ? (
+          <View style={styles.mediaContainer}>
+            <Image
+              source={{ uri: currentSlide.media_url }}
+              style={styles.image}
+              resizeMode="contain"
+            />
+          </View>
+        ) : (
+          <View style={styles.mediaContainer}>
+            <View style={styles.placeholderMedia}>
+              <IconSymbol
+                ios_icon_name="sparkles"
+                android_material_icon_name="auto_awesome"
+                size={80}
+                color={colors.primary}
+              />
+            </View>
+          </View>
+        )}
+
+        {/* Title */}
+        <Text style={styles.title}>{currentSlide.title}</Text>
+
+        {/* Content */}
+        {currentSlide.content && (
+          <Text style={styles.content}>{currentSlide.content}</Text>
+        )}
+
+        {/* Interactive Elements */}
+        {currentSlide.slide_type === 'notification_request' && (
+          <View style={styles.interactiveSection}>
+            <TouchableOpacity
+              style={[
+                styles.actionButton,
+                notificationStatus === 'granted' && styles.actionButtonSuccess,
+              ]}
+              onPress={requestNotificationPermissions}
+              disabled={notificationStatus === 'granted'}
+            >
+              <LinearGradient
+                colors={
+                  notificationStatus === 'granted'
+                    ? ['#10B981', '#059669']
+                    : colors.gradientPurple
+                }
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.actionButtonGradient}
+              >
+                <IconSymbol
+                  ios_icon_name={
+                    notificationStatus === 'granted'
+                      ? 'checkmark.circle.fill'
+                      : 'bell.fill'
+                  }
+                  android_material_icon_name={
+                    notificationStatus === 'granted' ? 'check_circle' : 'notifications'
+                  }
+                  size={24}
+                  color="#FFFFFF"
+                />
+                <Text style={styles.actionButtonText}>
+                  {notificationStatus === 'granted'
+                    ? 'Notifications Enabled ✓'
+                    : 'Enable Notifications'}
+                </Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {currentSlide.slide_type === 'profile_upload' && (
+          <View style={styles.interactiveSection}>
+            <TouchableOpacity style={styles.avatarUploadContainer} onPress={pickImage}>
+              {profileImage || creator?.avatar_url || creator?.profile_picture_url ? (
+                <Image
+                  source={{
+                    uri:
+                      profileImage ||
+                      creator?.profile_picture_url ||
+                      creator?.avatar_url ||
+                      '',
+                  }}
+                  style={styles.avatarPreview}
+                />
+              ) : (
+                <View style={styles.avatarPlaceholder}>
+                  <IconSymbol
+                    ios_icon_name="camera.fill"
+                    android_material_icon_name="add_a_photo"
+                    size={48}
+                    color={colors.primary}
+                  />
+                  <Text style={styles.avatarPlaceholderText}>Tap to Upload Photo</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+
+            {profileImage && !uploading && (
+              <TouchableOpacity
+                style={styles.uploadButton}
+                onPress={uploadProfilePicture}
+              >
+                <LinearGradient
+                  colors={colors.gradientPurple}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.uploadButtonGradient}
+                >
+                  <Text style={styles.uploadButtonText}>Upload Photo</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            )}
+
+            {uploading && (
+              <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 16 }} />
+            )}
+          </View>
+        )}
+      </ScrollView>
+
+      {/* Bottom Navigation */}
+      <View style={styles.bottomNav}>
+        {/* Progress Indicators */}
+        <View style={styles.progressContainer}>
+          {slides.map((_, index) => (
             <View
               key={index}
               style={[
-                styles.slideIndicator,
-                index === slideIndex && styles.slideIndicatorActive,
+                styles.progressDot,
+                index === currentIndex && styles.progressDotActive,
+                index < currentIndex && styles.progressDotCompleted,
               ]}
             />
           ))}
         </View>
 
-        <View style={styles.slideButtons}>
-          {slideIndex > 0 && (
-            <TouchableOpacity style={styles.slideButtonSecondary} onPress={handlePrevSlide}>
-              <Text style={styles.slideButtonSecondaryText}>Back</Text>
+        {/* Navigation Buttons */}
+        <View style={styles.navButtons}>
+          {currentIndex > 0 && (
+            <TouchableOpacity style={styles.backButton} onPress={handleBack}>
+              <IconSymbol
+                ios_icon_name="chevron.left"
+                android_material_icon_name="chevron_left"
+                size={24}
+                color={colors.text}
+              />
+              <Text style={styles.backButtonText}>Back</Text>
             </TouchableOpacity>
           )}
-          
-          <TouchableOpacity style={styles.slideButtonPrimary} onPress={handleNextSlide}>
+
+          <TouchableOpacity
+            style={[styles.nextButton, currentIndex === 0 && styles.nextButtonFull]}
+            onPress={handleNext}
+          >
             <LinearGradient
               colors={colors.gradientPurple}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
-              style={styles.buttonGradient}
+              style={styles.nextButtonGradient}
             >
-              <Text style={styles.buttonText}>
-                {slideIndex === ONBOARDING_SLIDES.length - 1 ? 'Get Started! 🚀' : 'Next'}
+              <Text style={styles.nextButtonText}>
+                {currentIndex === slides.length - 1 ? 'Get Started' : 'Next'}
               </Text>
+              <IconSymbol
+                ios_icon_name="chevron.right"
+                android_material_icon_name="chevron_right"
+                size={24}
+                color="#FFFFFF"
+              />
             </LinearGradient>
           </TouchableOpacity>
         </View>
       </View>
-    </LinearGradient>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: colors.background,
   },
-  content: {
+  loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 32,
+    backgroundColor: colors.background,
+    padding: 20,
   },
-  stepTitle: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: colors.text,
-    textAlign: 'center',
-    marginBottom: 12,
-  },
-  stepSubtitle: {
+  loadingText: {
+    marginTop: 16,
     fontSize: 16,
     fontWeight: '500',
     color: colors.textSecondary,
+  },
+  errorText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: colors.error,
     textAlign: 'center',
-    marginBottom: 48,
+    marginBottom: 24,
   },
-  avatarContainer: {
-    marginBottom: 48,
+  skipButton: {
+    position: 'absolute',
+    top: Platform.OS === 'android' ? 48 : 60,
+    right: 20,
+    zIndex: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: colors.backgroundAlt,
+    borderRadius: 20,
   },
-  avatar: {
+  skipButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  slideContainer: {
+    flexGrow: 1,
+    paddingTop: Platform.OS === 'android' ? 100 : 120,
+    paddingHorizontal: 24,
+    paddingBottom: 200,
+  },
+  mediaContainer: {
+    width: '100%',
+    height: height * 0.35,
+    marginBottom: 32,
+    borderRadius: 24,
+    overflow: 'hidden',
+    backgroundColor: colors.backgroundAlt,
+  },
+  video: {
+    width: '100%',
+    height: '100%',
+  },
+  image: {
+    width: '100%',
+    height: '100%',
+  },
+  placeholderMedia: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  title: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: colors.text,
+    textAlign: 'center',
+    marginBottom: 16,
+    lineHeight: 40,
+  },
+  content: {
+    fontSize: 18,
+    fontWeight: '500',
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 28,
+    marginBottom: 24,
+  },
+  interactiveSection: {
+    marginTop: 24,
+    alignItems: 'center',
+  },
+  actionButton: {
+    width: '100%',
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  actionButtonSuccess: {
+    opacity: 0.8,
+  },
+  actionButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 18,
+    paddingHorizontal: 24,
+    gap: 12,
+  },
+  actionButtonText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  avatarUploadContainer: {
     width: 160,
     height: 160,
     borderRadius: 80,
+    overflow: 'hidden',
+    marginBottom: 16,
+  },
+  avatarPreview: {
+    width: '100%',
+    height: '100%',
   },
   avatarPlaceholder: {
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    backgroundColor: colors.grey,
+    width: '100%',
+    height: '100%',
+    backgroundColor: colors.backgroundAlt,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 3,
@@ -346,122 +604,117 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
   },
   avatarPlaceholderText: {
-    fontSize: 48,
-    marginBottom: 8,
-  },
-  avatarPlaceholderLabel: {
     fontSize: 14,
     fontWeight: '600',
     color: colors.textSecondary,
+    marginTop: 12,
   },
-  button: {
+  uploadButton: {
     width: '100%',
     borderRadius: 16,
     overflow: 'hidden',
   },
-  buttonDisabled: {
-    opacity: 0.5,
-  },
-  buttonGradient: {
-    paddingVertical: 18,
+  uploadButtonGradient: {
+    paddingVertical: 16,
     alignItems: 'center',
   },
-  buttonText: {
-    fontSize: 18,
+  uploadButtonText: {
+    fontSize: 16,
     fontWeight: '700',
     color: '#FFFFFF',
   },
-  videoContainer: {
-    flex: 1,
-    backgroundColor: '#000000',
-  },
-  video: {
-    width: '100%',
-    height: '100%',
-  },
-  videoControls: {
-    padding: 24,
+  bottomNav: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
     backgroundColor: colors.backgroundAlt,
+    paddingTop: 24,
+    paddingBottom: Platform.OS === 'android' ? 24 : 40,
+    paddingHorizontal: 24,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 8,
+      },
+    }),
   },
-  progressBarContainer: {
-    height: 8,
-    backgroundColor: colors.grey,
-    borderRadius: 8,
-    overflow: 'hidden',
-    marginBottom: 12,
-  },
-  progressBar: {
-    height: '100%',
-    backgroundColor: colors.primary,
-    borderRadius: 8,
-  },
-  progressText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.textSecondary,
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  slideContent: {
-    flex: 1,
+  progressContainer: {
+    flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 32,
-  },
-  slideEmoji: {
-    fontSize: 100,
-    marginBottom: 32,
-  },
-  slideTitle: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: colors.text,
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  slideDescription: {
-    fontSize: 18,
-    fontWeight: '500',
-    color: colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 28,
-    marginBottom: 48,
-  },
-  slideIndicators: {
-    flexDirection: 'row',
     gap: 8,
-    marginBottom: 48,
+    marginBottom: 24,
   },
-  slideIndicator: {
+  progressDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: colors.grey,
+    backgroundColor: colors.border,
   },
-  slideIndicatorActive: {
-    width: 24,
+  progressDotActive: {
+    width: 32,
     backgroundColor: colors.primary,
   },
-  slideButtons: {
+  progressDotCompleted: {
+    backgroundColor: colors.primary,
+    opacity: 0.5,
+  },
+  navButtons: {
     flexDirection: 'row',
     gap: 12,
-    width: '100%',
   },
-  slideButtonSecondary: {
+  backButton: {
     flex: 1,
-    paddingVertical: 18,
-    borderRadius: 16,
-    backgroundColor: colors.grey,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    backgroundColor: colors.background,
+    borderRadius: 16,
+    gap: 8,
   },
-  slideButtonSecondaryText: {
-    fontSize: 18,
+  backButtonText: {
+    fontSize: 16,
     fontWeight: '700',
     color: colors.text,
   },
-  slideButtonPrimary: {
+  nextButton: {
     flex: 2,
     borderRadius: 16,
     overflow: 'hidden',
+  },
+  nextButtonFull: {
+    flex: 1,
+  },
+  nextButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    gap: 8,
+  },
+  nextButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  button: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+  },
+  buttonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
 });
