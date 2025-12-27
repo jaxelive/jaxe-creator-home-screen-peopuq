@@ -53,6 +53,8 @@ const PLACEHOLDER_ACTIVITIES = [
   },
 ];
 
+type TabType = 'all' | 'news' | 'contests';
+
 export default function NotificationsScreen() {
   const { creator } = useCreatorData();
   const [fontsLoaded] = useFonts({
@@ -65,7 +67,7 @@ export default function NotificationsScreen() {
   const [newsNotifications, setNewsNotifications] = useState<Notification[]>([]);
   const [contestNotifications, setContestNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
-  const [newsExpanded, setNewsExpanded] = useState(true);
+  const [activeTab, setActiveTab] = useState<TabType>('all');
 
   useEffect(() => {
     fetchNotifications();
@@ -151,6 +153,9 @@ export default function NotificationsScreen() {
     );
   }
 
+  const showNews = activeTab === 'all' || activeTab === 'news';
+  const showContests = activeTab === 'all' || activeTab === 'contests';
+
   return (
     <>
       <Stack.Screen
@@ -161,147 +166,217 @@ export default function NotificationsScreen() {
           headerTintColor: colors.text,
         }}
       />
-      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-        {/* News & Contest - Expandable Section */}
-        <TouchableOpacity
-          style={styles.expandableHeader}
-          onPress={() => setNewsExpanded(!newsExpanded)}
-          activeOpacity={0.7}
-        >
-          <View style={styles.expandableHeaderLeft}>
+      <View style={styles.container}>
+        {/* Tab Selector */}
+        <View style={styles.tabContainer}>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'all' && styles.tabActive]}
+            onPress={() => setActiveTab('all')}
+            activeOpacity={0.7}
+          >
             <IconSymbol
-              ios_icon_name="megaphone.fill"
-              android_material_icon_name="campaign"
-              size={24}
-              color={colors.primary}
+              ios_icon_name="square.grid.2x2.fill"
+              android_material_icon_name="dashboard"
+              size={20}
+              color={activeTab === 'all' ? colors.primary : colors.textSecondary}
             />
-            <Text style={styles.expandableHeaderTitle}>News & Contest</Text>
-          </View>
-          <IconSymbol
-            ios_icon_name={newsExpanded ? 'chevron.up' : 'chevron.down'}
-            android_material_icon_name={newsExpanded ? 'expand-less' : 'expand-more'}
-            size={24}
-            color={colors.textSecondary}
-          />
-        </TouchableOpacity>
+            <Text style={[styles.tabText, activeTab === 'all' && styles.tabTextActive]}>
+              All
+            </Text>
+          </TouchableOpacity>
 
-        {newsExpanded && (
-          <View style={styles.expandableContent}>
-            {/* News Section */}
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'news' && styles.tabActive]}
+            onPress={() => setActiveTab('news')}
+            activeOpacity={0.7}
+          >
+            <IconSymbol
+              ios_icon_name="newspaper.fill"
+              android_material_icon_name="article"
+              size={20}
+              color={activeTab === 'news' ? colors.primary : colors.textSecondary}
+            />
+            <Text style={[styles.tabText, activeTab === 'news' && styles.tabTextActive]}>
+              News
+            </Text>
             {newsNotifications.length > 0 && (
-              <View style={styles.section}>
-                <View style={styles.sectionHeader}>
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>{newsNotifications.length}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'contests' && styles.tabActive]}
+            onPress={() => setActiveTab('contests')}
+            activeOpacity={0.7}
+          >
+            <IconSymbol
+              ios_icon_name="trophy.fill"
+              android_material_icon_name="emoji-events"
+              size={20}
+              color={activeTab === 'contests' ? '#F59E0B' : colors.textSecondary}
+            />
+            <Text style={[
+              styles.tabText,
+              activeTab === 'contests' && styles.tabTextActiveContest
+            ]}>
+              Contests
+            </Text>
+            {contestNotifications.length > 0 && (
+              <View style={[styles.badge, styles.badgeContest]}>
+                <Text style={styles.badgeText}>{contestNotifications.length}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
+          {/* News Section */}
+          {showNews && newsNotifications.length > 0 && (
+            <View style={styles.section}>
+              {activeTab === 'all' && (
+                <View style={styles.sectionHeaderRow}>
                   <IconSymbol
                     ios_icon_name="newspaper.fill"
                     android_material_icon_name="article"
-                    size={20}
+                    size={24}
                     color={colors.primary}
                   />
                   <Text style={styles.sectionTitle}>Agency News</Text>
                 </View>
-                {newsNotifications.map((news) => (
-                  <View key={news.id} style={styles.newsCard}>
-                    <View style={styles.newsHeader}>
-                      <View style={styles.newsIconContainer}>
-                        <IconSymbol
-                          ios_icon_name="info.circle.fill"
-                          android_material_icon_name="info"
-                          size={20}
-                          color={colors.primary}
-                        />
-                      </View>
-                      <View style={styles.newsHeaderContent}>
-                        <Text style={styles.newsTitle}>{news.title || 'News Update'}</Text>
-                        <Text style={styles.newsDate}>{formatDate(news.created_at)}</Text>
-                      </View>
+              )}
+              {newsNotifications.map((news) => (
+                <View key={news.id} style={styles.newsCard}>
+                  <View style={styles.newsTopBar}>
+                    <View style={styles.newsTypeIndicator}>
+                      <IconSymbol
+                        ios_icon_name="info.circle.fill"
+                        android_material_icon_name="info"
+                        size={16}
+                        color={colors.primary}
+                      />
+                      <Text style={styles.newsTypeText}>NEWS</Text>
                     </View>
-                    <Text style={styles.newsBody}>{news.content}</Text>
+                    <Text style={styles.newsDate}>{formatDate(news.created_at)}</Text>
                   </View>
-                ))}
-              </View>
-            )}
+                  <Text style={styles.newsTitle}>{news.title || 'News Update'}</Text>
+                  <Text style={styles.newsBody}>{news.content}</Text>
+                </View>
+              ))}
+            </View>
+          )}
 
-            {/* Contests Section */}
-            {contestNotifications.length > 0 && (
-              <View style={styles.section}>
-                <View style={styles.sectionHeader}>
+          {/* Contests Section */}
+          {showContests && contestNotifications.length > 0 && (
+            <View style={styles.section}>
+              {activeTab === 'all' && (
+                <View style={styles.sectionHeaderRow}>
                   <IconSymbol
                     ios_icon_name="trophy.fill"
                     android_material_icon_name="emoji-events"
-                    size={20}
+                    size={24}
                     color="#F59E0B"
                   />
                   <Text style={[styles.sectionTitle, { color: '#F59E0B' }]}>Active Contests</Text>
                 </View>
-                {contestNotifications.map((contest) => (
-                  <View key={contest.id} style={styles.contestCard}>
-                    <View style={styles.contestBadge}>
-                      <IconSymbol
-                        ios_icon_name="star.fill"
-                        android_material_icon_name="star"
-                        size={16}
-                        color="#FFFFFF"
-                      />
-                      <Text style={styles.contestBadgeText}>CONTEST</Text>
-                    </View>
-                    <View style={styles.contestHeader}>
-                      <View style={styles.contestIconWrapper}>
+              )}
+              {contestNotifications.map((contest) => (
+                <View key={contest.id} style={styles.contestCard}>
+                  <View style={styles.contestGradientBar} />
+                  <View style={styles.contestContent}>
+                    <View style={styles.contestTopSection}>
+                      <View style={styles.contestIconCircle}>
                         <IconSymbol
                           ios_icon_name="trophy.fill"
                           android_material_icon_name="emoji-events"
-                          size={40}
+                          size={32}
                           color="#F59E0B"
                         />
                       </View>
-                      <View style={styles.contestInfo}>
-                        <Text style={styles.contestTitle}>{contest.title || 'Contest Alert'}</Text>
-                        <Text style={styles.contestDate}>
-                          Posted: {formatDate(contest.created_at)}
-                        </Text>
+                      <View style={styles.contestBadgeTag}>
+                        <IconSymbol
+                          ios_icon_name="star.fill"
+                          android_material_icon_name="star"
+                          size={12}
+                          color="#FFFFFF"
+                        />
+                        <Text style={styles.contestBadgeTagText}>CONTEST</Text>
                       </View>
                     </View>
+                    <Text style={styles.contestTitle}>{contest.title || 'Contest Alert'}</Text>
                     <Text style={styles.contestDescription}>{contest.content}</Text>
+                    <View style={styles.contestFooter}>
+                      <IconSymbol
+                        ios_icon_name="calendar"
+                        android_material_icon_name="event"
+                        size={14}
+                        color="#F59E0B"
+                      />
+                      <Text style={styles.contestFooterText}>
+                        Posted {formatDate(contest.created_at)}
+                      </Text>
+                    </View>
                   </View>
-                ))}
-              </View>
-            )}
+                </View>
+              ))}
+            </View>
+          )}
 
-            {newsNotifications.length === 0 && contestNotifications.length === 0 && (
-              <View style={styles.emptyState}>
-                <IconSymbol
-                  ios_icon_name="bell.slash"
-                  android_material_icon_name="notifications-off"
-                  size={48}
-                  color={colors.textTertiary}
-                />
-                <Text style={styles.emptyStateText}>No announcements or contests at the moment</Text>
-              </View>
-            )}
-          </View>
-        )}
+          {/* Empty State */}
+          {((showNews && newsNotifications.length === 0) || 
+            (showContests && contestNotifications.length === 0)) && 
+            newsNotifications.length === 0 && 
+            contestNotifications.length === 0 && (
+            <View style={styles.emptyState}>
+              <IconSymbol
+                ios_icon_name="bell.slash"
+                android_material_icon_name="notifications-off"
+                size={64}
+                color={colors.textTertiary}
+              />
+              <Text style={styles.emptyStateTitle}>No Notifications</Text>
+              <Text style={styles.emptyStateText}>
+                {activeTab === 'news' && 'No news updates at the moment'}
+                {activeTab === 'contests' && 'No active contests right now'}
+                {activeTab === 'all' && 'No announcements or contests at the moment'}
+              </Text>
+            </View>
+          )}
 
-        {/* Recent Activity Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Recent Activity</Text>
-          {PLACEHOLDER_ACTIVITIES.map((activity) => (
-            <View key={activity.id} style={styles.activityCard}>
-              <View style={styles.activityIconContainer}>
+          {/* Recent Activity Section - Only show in 'all' tab */}
+          {activeTab === 'all' && (
+            <View style={styles.section}>
+              <View style={styles.sectionHeaderRow}>
                 <IconSymbol
-                  ios_icon_name={activity.icon}
-                  android_material_icon_name={activity.iconAndroid}
+                  ios_icon_name="clock.fill"
+                  android_material_icon_name="history"
                   size={24}
                   color={colors.primary}
                 />
+                <Text style={styles.sectionTitle}>Recent Activity</Text>
               </View>
-              <View style={styles.activityContent}>
-                <Text style={styles.activityTitle}>{activity.title}</Text>
-                <Text style={styles.activityDescription}>{activity.description}</Text>
-                <Text style={styles.activityTime}>{formatRelativeTime(activity.timestamp)}</Text>
-              </View>
+              {PLACEHOLDER_ACTIVITIES.map((activity) => (
+                <View key={activity.id} style={styles.activityCard}>
+                  <View style={styles.activityIconContainer}>
+                    <IconSymbol
+                      ios_icon_name={activity.icon}
+                      android_material_icon_name={activity.iconAndroid}
+                      size={24}
+                      color={colors.primary}
+                    />
+                  </View>
+                  <View style={styles.activityContent}>
+                    <Text style={styles.activityTitle}>{activity.title}</Text>
+                    <Text style={styles.activityDescription}>{activity.description}</Text>
+                    <Text style={styles.activityTime}>{formatRelativeTime(activity.timestamp)}</Text>
+                  </View>
+                </View>
+              ))}
             </View>
-          ))}
-        </View>
-      </ScrollView>
+          )}
+        </ScrollView>
+      </View>
     </>
   );
 }
@@ -316,108 +391,163 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  content: {
-    padding: 20,
-    paddingBottom: 120,
-  },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
     fontFamily: 'Poppins_500Medium',
     color: colors.textSecondary,
   },
-  expandableHeader: {
+  tabContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     backgroundColor: colors.backgroundAlt,
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 16,
+    marginHorizontal: 20,
+    marginTop: 16,
+    marginBottom: 8,
+    borderRadius: 16,
+    padding: 4,
+    gap: 4,
   },
-  expandableHeaderLeft: {
+  tab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    gap: 6,
+  },
+  tabActive: {
+    backgroundColor: colors.background,
+  },
+  tabText: {
+    fontSize: 14,
+    fontFamily: 'Poppins_600SemiBold',
+    color: colors.textSecondary,
+  },
+  tabTextActive: {
+    color: colors.primary,
+  },
+  tabTextActiveContest: {
+    color: '#F59E0B',
+  },
+  badge: {
+    backgroundColor: colors.primary,
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+  },
+  badgeContest: {
+    backgroundColor: '#F59E0B',
+  },
+  badgeText: {
+    fontSize: 11,
+    fontFamily: 'Poppins_700Bold',
+    color: '#FFFFFF',
+  },
+  scrollView: {
+    flex: 1,
+  },
+  content: {
+    padding: 20,
+    paddingBottom: 120,
+  },
+  section: {
+    marginBottom: 32,
+  },
+  sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-  },
-  expandableHeaderTitle: {
-    fontSize: 18,
-    fontFamily: 'Poppins_700Bold',
-    color: colors.text,
-  },
-  expandableContent: {
     marginBottom: 16,
-  },
-  section: {
-    marginBottom: 24,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 12,
   },
   sectionTitle: {
     fontSize: 20,
     fontFamily: 'Poppins_700Bold',
     color: colors.text,
   },
+  // News Card Styles - Clean, minimal design
   newsCard: {
     backgroundColor: colors.backgroundAlt,
     borderRadius: 16,
-    padding: 16,
+    padding: 20,
     marginBottom: 12,
     borderLeftWidth: 4,
     borderLeftColor: colors.primary,
   },
-  newsHeader: {
+  newsTopBar: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 12,
-    gap: 12,
-  },
-  newsIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(102, 66, 239, 0.1)',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 12,
   },
-  newsHeaderContent: {
-    flex: 1,
+  newsTypeIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(102, 66, 239, 0.1)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
-  newsTitle: {
-    fontSize: 16,
+  newsTypeText: {
+    fontSize: 10,
     fontFamily: 'Poppins_700Bold',
-    color: colors.text,
-    marginBottom: 4,
+    color: colors.primary,
+    letterSpacing: 0.5,
   },
   newsDate: {
     fontSize: 12,
     fontFamily: 'Poppins_500Medium',
     color: colors.textSecondary,
   },
+  newsTitle: {
+    fontSize: 18,
+    fontFamily: 'Poppins_700Bold',
+    color: colors.text,
+    marginBottom: 8,
+    lineHeight: 24,
+  },
   newsBody: {
     fontSize: 14,
     fontFamily: 'Poppins_400Regular',
     color: colors.textSecondary,
-    lineHeight: 20,
+    lineHeight: 22,
   },
+  // Contest Card Styles - Bold, eye-catching design
   contestCard: {
     backgroundColor: '#1A1A1A',
     borderRadius: 20,
-    padding: 20,
-    marginBottom: 12,
+    marginBottom: 16,
+    overflow: 'hidden',
     borderWidth: 2,
     borderColor: '#F59E0B',
-    position: 'relative',
-    overflow: 'hidden',
   },
-  contestBadge: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
+  contestGradientBar: {
+    height: 6,
+    backgroundColor: '#F59E0B',
+  },
+  contestContent: {
+    padding: 20,
+  },
+  contestTopSection: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+  },
+  contestIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  contestBadgeTag: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
@@ -425,51 +555,41 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
-    zIndex: 10,
   },
-  contestBadgeText: {
+  contestBadgeTagText: {
     fontSize: 10,
     fontFamily: 'Poppins_700Bold',
     color: '#FFFFFF',
     letterSpacing: 0.5,
   },
-  contestHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-    marginBottom: 16,
-    paddingRight: 100,
-  },
-  contestIconWrapper: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexShrink: 0,
-  },
-  contestInfo: {
-    flex: 1,
-  },
   contestTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontFamily: 'Poppins_700Bold',
     color: '#FFFFFF',
-    marginBottom: 4,
-    flexWrap: 'wrap',
-  },
-  contestDate: {
-    fontSize: 12,
-    fontFamily: 'Poppins_500Medium',
-    color: '#F59E0B',
+    marginBottom: 12,
+    lineHeight: 28,
   },
   contestDescription: {
     fontSize: 14,
     fontFamily: 'Poppins_400Regular',
     color: '#D1D5DB',
-    lineHeight: 20,
+    lineHeight: 22,
+    marginBottom: 16,
   },
+  contestFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(245, 158, 11, 0.2)',
+  },
+  contestFooterText: {
+    fontSize: 12,
+    fontFamily: 'Poppins_500Medium',
+    color: '#F59E0B',
+  },
+  // Activity Card Styles
   activityCard: {
     flexDirection: 'row',
     backgroundColor: colors.backgroundAlt,
@@ -507,15 +627,24 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_500Medium',
     color: colors.textTertiary,
   },
+  // Empty State
   emptyState: {
     alignItems: 'center',
-    paddingVertical: 48,
+    paddingVertical: 64,
+    paddingHorizontal: 32,
+  },
+  emptyStateTitle: {
+    fontSize: 20,
+    fontFamily: 'Poppins_700Bold',
+    color: colors.text,
+    marginTop: 20,
+    marginBottom: 8,
   },
   emptyStateText: {
-    fontSize: 16,
-    fontFamily: 'Poppins_500Medium',
+    fontSize: 15,
+    fontFamily: 'Poppins_400Regular',
     color: colors.textSecondary,
-    marginTop: 16,
     textAlign: 'center',
+    lineHeight: 22,
   },
 });
