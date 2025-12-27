@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,259 +9,397 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  Image,
 } from 'react-native';
-import { useSupabase } from '@/contexts/SupabaseContext';
+import { Stack, router } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
+import * as ImagePicker from 'expo-image-picker';
 import { colors } from '@/styles/commonStyles';
+import { supabase } from '@/app/integrations/supabase/client';
+import { useCreatorData } from '@/hooks/useCreatorData';
+import { IconSymbol } from '@/components/IconSymbol';
+import { uploadImageToStorage, deleteImageFromStorage, extractStoragePathFromUrl } from '@/utils/imageUpload';
 
 export default function ProfileScreen() {
-  const { user, session, loading, signUp, signIn, signInWithOtp, signOut, isConfigured } = useSupabase();
+  const { creator, loading: creatorLoading, refetch } = useCreatorData();
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isUploadingProfilePic, setIsUploadingProfilePic] = useState(false);
+
+  // Editable fields
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [isSignUp, setIsSignUp] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [language, setLanguage] = useState('');
+  const [paypalEmail, setPaypalEmail] = useState('');
+  const [profilePicture, setProfilePicture] = useState<string | null>(null);
 
-  const handleAuth = async () => {
-    if (!email || (!password && !isSignUp)) {
-      Alert.alert('Error', 'Please fill in all fields');
+  // Track if profile picture has changed
+  const [profilePictureChanged, setProfilePictureChanged] = useState(false);
+
+  useEffect(() => {
+    if (creator) {
+      setEmail(creator.email || '');
+      setLanguage(creator.language || 'English');
+      setPaypalEmail(creator.paypal_email || '');
+      setProfilePicture(creator.profile_picture_url || creator.avatar_url || null);
+      setProfilePictureChanged(false);
+    }
+  }, [creator]);
+
+  const pickImage = async () => {
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (permissionResult.granted === false) {
+      Alert.alert('Permission Required', 'Permission to access camera roll is required!');
       return;
     }
 
-    setIsSubmitting(true);
-    try {
-      if (isSignUp) {
-        const { error } = await signUp(email, password);
-        if (error) {
-          Alert.alert('Sign Up Error', error.message);
-        } else {
-          Alert.alert('Success', 'Check your email to confirm your account!');
-          setEmail('');
-          setPassword('');
-        }
-      } else {
-        const { error } = await signIn(email, password);
-        if (error) {
-          Alert.alert('Sign In Error', error.message);
-        } else {
-          Alert.alert('Success', 'Signed in successfully!');
-          setEmail('');
-          setPassword('');
-        }
-      }
-    } catch (error) {
-      console.error('Auth error:', error);
-      Alert.alert('Error', 'An unexpected error occurred');
-    } finally {
-      setIsSubmitting(false);
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      setProfilePicture(result.assets[0].uri);
+      setProfilePictureChanged(true);
     }
   };
 
-  const handleOtpSignIn = async () => {
-    if (!email) {
-      Alert.alert('Error', 'Please enter your email');
-      return;
-    }
+  const handleSave = async () => {
+    if (!creator) return;
 
-    setIsSubmitting(true);
+    setIsSaving(true);
     try {
-      const { error } = await signInWithOtp(email);
+      const updates: any = {
+        email,
+        language,
+        paypal_email: paypalEmail,
+      };
+
+      // Upload profile picture if it changed
+      if (profilePictureChanged && profilePicture) {
+        setIsUploadingProfilePic(true);
+        try {
+          console.log('[Profile] Uploading profile picture...');
+          
+          // Delete old profile picture if it exists
+          if (creator.profile_picture_url) {
+            const oldPath = extractStoragePathFromUrl(creator.profile_picture_url, 'avatars');
+            if (oldPath) {
+              try {
+                await deleteImageFromStorage(oldPath, 'avatars');
+                console.log('[Profile] Old profile picture deleted');
+              } catch (deleteError) {
+                console.warn('[Profile] Could not delete old profile picture:', deleteError);
+              }
+            }
+          }
+
+          // Upload new profile picture
+          const uploadResult = await uploadImageToStorage(
+            profilePicture,
+            'avatars',
+            `creators/${creator.id}`,
+            800,
+            800,
+            0.8
+          );
+
+          console.log('[Profile] Profile picture uploaded:', uploadResult.publicUrl);
+          updates.profile_picture_url = uploadResult.publicUrl;
+          updates.avatar_url = uploadResult.publicUrl;
+        } catch (uploadError) {
+          console.error('[Profile] Profile picture upload error:', uploadError);
+          Alert.alert('Upload Error', 'Failed to upload profile picture. Please try again.');
+          setIsSaving(false);
+          setIsUploadingProfilePic(false);
+          return;
+        } finally {
+          setIsUploadingProfilePic(false);
+        }
+      }
+
+      // Update the creators table
+      console.log('[Profile] Updating creators table with:', updates);
+      const { error } = await supabase
+        .from('creators')
+        .update(updates)
+        .eq('id', creator.id);
+
       if (error) {
-        Alert.alert('Error', error.message);
+        console.error('[Profile] Error updating profile:', error);
+        Alert.alert('Error', 'Failed to update profile. Please try again.');
       } else {
-        Alert.alert('Success', 'Check your email for the magic link!');
-        setEmail('');
+        Alert.alert('Success', 'Profile updated successfully!');
+        setIsEditing(false);
+        setProfilePictureChanged(false);
+        await refetch();
       }
     } catch (error) {
-      console.error('OTP error:', error);
-      Alert.alert('Error', 'An unexpected error occurred');
+      console.error('[Profile] Error saving profile:', error);
+      Alert.alert('Error', 'An unexpected error occurred.');
     } finally {
-      setIsSubmitting(false);
+      setIsSaving(false);
     }
   };
 
-  const handleSignOut = async () => {
-    const { error } = await signOut();
-    if (error) {
-      Alert.alert('Error', error.message);
-    } else {
-      Alert.alert('Success', 'Signed out successfully!');
-    }
-  };
-
-  if (!isConfigured) {
-    return (
-      <View style={styles.container}>
-        <ScrollView contentContainerStyle={styles.scrollContent}>
-          <View style={styles.setupCard}>
-            <Text style={styles.setupTitle}>🔧 Supabase Setup Required</Text>
-            <Text style={styles.setupText}>
-              To use authentication features, you need to configure Supabase:
-            </Text>
-            
-            <View style={styles.stepContainer}>
-              <Text style={styles.stepNumber}>1.</Text>
-              <Text style={styles.stepText}>
-                Create a Supabase project at{'\n'}
-                <Text style={styles.link}>https://supabase.com</Text>
-              </Text>
-            </View>
-
-            <View style={styles.stepContainer}>
-              <Text style={styles.stepNumber}>2.</Text>
-              <Text style={styles.stepText}>
-                Go to Project Settings → API
-              </Text>
-            </View>
-
-            <View style={styles.stepContainer}>
-              <Text style={styles.stepNumber}>3.</Text>
-              <Text style={styles.stepText}>
-                Copy your Project URL and anon/public key
-              </Text>
-            </View>
-
-            <View style={styles.stepContainer}>
-              <Text style={styles.stepNumber}>4.</Text>
-              <Text style={styles.stepText}>
-                Create a .env file in your project root with:
-              </Text>
-            </View>
-
-            <View style={styles.codeBlock}>
-              <Text style={styles.codeText}>
-                EXPO_PUBLIC_SUPABASE_URL=your-url{'\n'}
-                EXPO_PUBLIC_SUPABASE_ANON_KEY=your-key
-              </Text>
-            </View>
-
-            <View style={styles.stepContainer}>
-              <Text style={styles.stepNumber}>5.</Text>
-              <Text style={styles.stepText}>
-                Restart your development server
-              </Text>
-            </View>
-          </View>
-        </ScrollView>
-      </View>
+  const handleRequestManager = () => {
+    Alert.alert(
+      'Request Manager',
+      'Your request has been submitted. A manager will be assigned to you soon.',
+      [{ text: 'OK' }]
     );
-  }
+  };
 
-  if (loading) {
+  if (creatorLoading) {
     return (
-      <View style={styles.container}>
+      <View style={styles.loadingContainer}>
+        <Stack.Screen options={{ title: 'Profile', headerShown: true }} />
         <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loadingText}>Loading...</Text>
+        <Text style={styles.loadingText}>Loading profile...</Text>
       </View>
     );
   }
 
-  if (user) {
+  if (!creator) {
     return (
-      <View style={styles.container}>
-        <ScrollView contentContainerStyle={styles.scrollContent}>
-          <View style={styles.card}>
-            <Text style={styles.title}>✅ Signed In</Text>
-            <View style={styles.userInfo}>
-              <Text style={styles.label}>Email:</Text>
-              <Text style={styles.value}>{user.email}</Text>
-            </View>
-            <View style={styles.userInfo}>
-              <Text style={styles.label}>User ID:</Text>
-              <Text style={styles.value}>{user.id}</Text>
-            </View>
-            <View style={styles.userInfo}>
-              <Text style={styles.label}>Created:</Text>
-              <Text style={styles.value}>
-                {new Date(user.created_at).toLocaleDateString()}
-              </Text>
-            </View>
-            
-            <TouchableOpacity
-              style={styles.signOutButton}
-              onPress={handleSignOut}
-            >
-              <Text style={styles.signOutButtonText}>Sign Out</Text>
-            </TouchableOpacity>
-          </View>
-        </ScrollView>
+      <View style={styles.loadingContainer}>
+        <Stack.Screen options={{ title: 'Profile', headerShown: true }} />
+        <Text style={styles.errorText}>No profile data available</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.card}>
-          <Text style={styles.title}>
-            {isSignUp ? '🚀 Create Account' : '👋 Welcome Back'}
-          </Text>
-          
-          <TextInput
-            style={styles.input}
-            placeholder="Email"
-            placeholderTextColor={colors.textSecondary}
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            editable={!isSubmitting}
-          />
-          
-          <TextInput
-            style={styles.input}
-            placeholder="Password"
-            placeholderTextColor={colors.textSecondary}
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            editable={!isSubmitting}
-          />
-          
-          <TouchableOpacity
-            style={[styles.button, isSubmitting && styles.buttonDisabled]}
-            onPress={handleAuth}
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.buttonText}>
-                {isSignUp ? 'Sign Up' : 'Sign In'}
+    <>
+      <Stack.Screen
+        options={{
+          title: 'Profile',
+          headerShown: true,
+          headerRight: () => (
+            <TouchableOpacity
+              onPress={() => {
+                if (isEditing) {
+                  // Cancel editing
+                  setEmail(creator.email || '');
+                  setLanguage(creator.language || 'English');
+                  setPaypalEmail(creator.paypal_email || '');
+                  setProfilePicture(creator.profile_picture_url || creator.avatar_url || null);
+                  setProfilePictureChanged(false);
+                  setIsEditing(false);
+                } else {
+                  setIsEditing(true);
+                }
+              }}
+              style={styles.headerButton}
+            >
+              <Text style={styles.headerButtonText}>
+                {isEditing ? 'Cancel' : 'Edit'}
               </Text>
-            )}
-          </TouchableOpacity>
-
+            </TouchableOpacity>
+          ),
+        }}
+      />
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+        {/* Profile Header - Simplified */}
+        <LinearGradient
+          colors={['#FFFFFF', '#FAF5FF']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.headerCard}
+        >
           <TouchableOpacity
-            style={styles.linkButton}
-            onPress={() => setIsSignUp(!isSignUp)}
-            disabled={isSubmitting}
+            onPress={isEditing ? pickImage : undefined}
+            disabled={!isEditing || isUploadingProfilePic}
+            style={styles.avatarContainer}
+            activeOpacity={isEditing ? 0.7 : 1}
           >
-            <Text style={styles.linkText}>
-              {isSignUp
-                ? 'Already have an account? Sign In'
-                : "Don't have an account? Sign Up"}
-            </Text>
-          </TouchableOpacity>
-
-          <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>OR</Text>
-            <View style={styles.dividerLine} />
-          </View>
-
-          <TouchableOpacity
-            style={[styles.otpButton, isSubmitting && styles.buttonDisabled]}
-            onPress={handleOtpSignIn}
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? (
-              <ActivityIndicator color={colors.primary} />
+            {profilePicture ? (
+              <Image source={{ uri: profilePicture }} style={styles.avatar} />
             ) : (
-              <Text style={styles.otpButtonText}>Sign in with Magic Link</Text>
+              <View style={styles.avatarPlaceholder}>
+                <IconSymbol
+                  ios_icon_name="person.fill"
+                  android_material_icon_name="person"
+                  size={48}
+                  color="#fff"
+                />
+              </View>
             )}
+            {isEditing && (
+              <View style={styles.editBadge}>
+                {isUploadingProfilePic ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <IconSymbol
+                    ios_icon_name="camera.fill"
+                    android_material_icon_name="photo_camera"
+                    size={16}
+                    color="#fff"
+                  />
+                )}
+              </View>
+            )}
+          </TouchableOpacity>
+          
+          {isEditing && (
+            <Text style={styles.uploadHint}>Tap to change profile picture</Text>
+          )}
+          
+          <Text style={styles.name}>
+            {creator.first_name} {creator.last_name}
+          </Text>
+        </LinearGradient>
+
+        {/* Contact Information */}
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Contact Information</Text>
+          
+          <View style={styles.fieldContainer}>
+            <Text style={styles.fieldLabel}>Email</Text>
+            {isEditing ? (
+              <TextInput
+                style={styles.input}
+                value={email}
+                onChangeText={setEmail}
+                placeholder="Enter your email"
+                placeholderTextColor={colors.textSecondary}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+            ) : (
+              <Text style={styles.fieldValue}>{email || 'Not set'}</Text>
+            )}
+          </View>
+          
+          <View style={styles.fieldContainer}>
+            <Text style={styles.fieldLabel}>Language</Text>
+            {isEditing ? (
+              <TextInput
+                style={styles.input}
+                value={language}
+                onChangeText={setLanguage}
+                placeholder="e.g., English, Spanish"
+                placeholderTextColor={colors.textSecondary}
+              />
+            ) : (
+              <Text style={styles.fieldValue}>{language || 'Not set'}</Text>
+            )}
+          </View>
+        </View>
+
+        {/* Payment Information */}
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Payment Information</Text>
+          <Text style={styles.sectionSubtitle}>For receiving payments only</Text>
+          
+          <View style={styles.fieldContainer}>
+            <Text style={styles.fieldLabel}>PayPal Email</Text>
+            {isEditing ? (
+              <TextInput
+                style={styles.input}
+                value={paypalEmail}
+                onChangeText={setPaypalEmail}
+                placeholder="Enter your PayPal email"
+                placeholderTextColor={colors.textSecondary}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+            ) : (
+              <Text style={styles.fieldValue}>{paypalEmail || 'Not set'}</Text>
+            )}
+          </View>
+        </View>
+
+        {/* Creator Information - Read Only */}
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Creator Information</Text>
+          
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Username</Text>
+            <Text style={styles.infoValue}>@{creator.creator_handle}</Text>
+          </View>
+          <View style={styles.divider} />
+          
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Region</Text>
+            <Text style={styles.infoValue}>{creator.region || 'Not set'}</Text>
+          </View>
+          <View style={styles.divider} />
+          
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Graduation Tier</Text>
+            <Text style={styles.infoValue}>
+              {creator.graduation_status || 'Rookie'}
+            </Text>
+          </View>
+        </View>
+
+        {/* Settings Section */}
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Settings</Text>
+          
+          <TouchableOpacity
+            style={styles.settingRow}
+            onPress={() => router.push('/onboarding' as any)}
+          >
+            <View style={styles.settingLeft}>
+              <IconSymbol
+                ios_icon_name="book.fill"
+                android_material_icon_name="menu_book"
+                size={24}
+                color={colors.primary}
+              />
+              <Text style={styles.settingLabel}>View Onboarding</Text>
+            </View>
+            <IconSymbol
+              ios_icon_name="chevron.right"
+              android_material_icon_name="chevron_right"
+              size={20}
+              color={colors.textSecondary}
+            />
           </TouchableOpacity>
         </View>
+
+        {/* Manager Section */}
+        {!creator.assigned_manager_id && (
+          <TouchableOpacity
+            style={styles.requestButton}
+            onPress={handleRequestManager}
+          >
+            <LinearGradient
+              colors={[colors.primary, colors.primaryLight]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.requestButtonGradient}
+            >
+              <Text style={styles.requestButtonText}>Request Manager</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        )}
+
+        {/* Save Button */}
+        {isEditing && (
+          <TouchableOpacity
+            style={[styles.saveButton, (isSaving || isUploadingProfilePic) && styles.saveButtonDisabled]}
+            onPress={handleSave}
+            disabled={isSaving || isUploadingProfilePic}
+          >
+            {(isSaving || isUploadingProfilePic) ? (
+              <View style={styles.savingContainer}>
+                <ActivityIndicator color="#fff" />
+                <Text style={styles.saveButtonText}>
+                  {isUploadingProfilePic ? 'Uploading...' : 'Saving...'}
+                </Text>
+              </View>
+            ) : (
+              <Text style={styles.saveButtonText}>Save Changes</Text>
+            )}
+          </TouchableOpacity>
+        )}
       </ScrollView>
-    </View>
+    </>
   );
 }
 
@@ -270,176 +408,202 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
+  content: {
     padding: 20,
+    paddingBottom: 120,
   },
-  card: {
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  setupCard: {
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginBottom: 24,
-    textAlign: 'center',
-  },
-  setupTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  setupText: {
-    fontSize: 16,
-    color: colors.text,
-    marginBottom: 24,
-    lineHeight: 24,
-  },
-  stepContainer: {
-    flexDirection: 'row',
-    marginBottom: 16,
-  },
-  stepNumber: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: colors.primary,
-    marginRight: 12,
-    width: 24,
-  },
-  stepText: {
-    fontSize: 16,
-    color: colors.text,
+  loadingContainer: {
     flex: 1,
-    lineHeight: 24,
-  },
-  link: {
-    color: colors.primary,
-    textDecorationLine: 'underline',
-  },
-  codeBlock: {
     backgroundColor: colors.background,
-    borderRadius: 8,
-    padding: 16,
-    marginVertical: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerCard: {
+    borderRadius: 24,
+    padding: 32,
+    marginBottom: 20,
+    alignItems: 'center',
     borderWidth: 1,
     borderColor: colors.border,
   },
-  codeText: {
-    fontFamily: 'SpaceMono',
-    fontSize: 12,
+  avatarContainer: {
+    position: 'relative',
+    marginBottom: 12,
+  },
+  avatar: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: colors.background,
+    borderWidth: 4,
+    borderColor: '#fff',
+  },
+  avatarPlaceholder: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 4,
+    borderColor: '#fff',
+  },
+  editBadge: {
+    position: 'absolute',
+    bottom: 4,
+    right: 4,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: '#fff',
+  },
+  uploadHint: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: colors.textSecondary,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  name: {
+    fontSize: 26,
+    fontWeight: '700',
     color: colors.text,
-    lineHeight: 20,
+    textAlign: 'center',
+  },
+  card: {
+    backgroundColor: colors.backgroundAlt,
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 4,
+  },
+  sectionSubtitle: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: colors.textSecondary,
+    marginBottom: 16,
+  },
+  fieldContainer: {
+    marginBottom: 16,
+  },
+  fieldLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    marginBottom: 8,
+  },
+  fieldValue: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: colors.text,
+    paddingVertical: 4,
   },
   input: {
     backgroundColor: colors.background,
     borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
+    padding: 14,
     fontSize: 16,
     color: colors.text,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  button: {
-    backgroundColor: colors.primary,
-    borderRadius: 12,
-    padding: 16,
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    paddingVertical: 12,
   },
-  buttonDisabled: {
-    opacity: 0.6,
+  infoLabel: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: colors.textSecondary,
   },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
+  infoValue: {
+    fontSize: 15,
     fontWeight: '600',
-  },
-  linkButton: {
-    padding: 12,
-    alignItems: 'center',
-  },
-  linkText: {
-    color: colors.primary,
-    fontSize: 14,
+    color: colors.text,
   },
   divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 24,
-  },
-  dividerLine: {
-    flex: 1,
     height: 1,
     backgroundColor: colors.border,
   },
-  dividerText: {
-    marginHorizontal: 16,
-    color: colors.textSecondary,
-    fontSize: 14,
-  },
-  otpButton: {
-    backgroundColor: 'transparent',
-    borderRadius: 12,
-    padding: 16,
+  settingRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: colors.primary,
+    justifyContent: 'space-between',
+    paddingVertical: 12,
   },
-  otpButtonText: {
-    color: colors.primary,
+  settingLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  settingLabel: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '500',
+    color: colors.text,
   },
-  userInfo: {
+  requestButton: {
+    marginBottom: 16,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  requestButtonGradient: {
+    padding: 18,
+    alignItems: 'center',
+  },
+  requestButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  saveButton: {
+    backgroundColor: colors.primary,
+    borderRadius: 16,
+    padding: 18,
+    alignItems: 'center',
     marginBottom: 16,
   },
-  label: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginBottom: 4,
+  saveButtonDisabled: {
+    opacity: 0.6,
   },
-  value: {
+  saveButtonText: {
     fontSize: 16,
-    color: colors.text,
-    fontWeight: '500',
-  },
-  signOutButton: {
-    backgroundColor: colors.error || '#ff3b30',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    marginTop: 24,
-  },
-  signOutButtonText: {
+    fontWeight: '700',
     color: '#fff',
+  },
+  savingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  headerButton: {
+    marginRight: 16,
+  },
+  headerButtonText: {
     fontSize: 16,
     fontWeight: '600',
+    color: colors.primary,
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: colors.text,
+    color: colors.textSecondary,
+  },
+  errorText: {
+    fontSize: 16,
+    color: colors.error,
     textAlign: 'center',
   },
 });
