@@ -78,7 +78,10 @@ export default function ProfileScreen() {
   };
 
   const handleSave = async () => {
-    if (!creator) return;
+    if (!creator) {
+      console.error('[Profile] No creator data available');
+      return;
+    }
 
     setIsSaving(true);
     try {
@@ -234,7 +237,7 @@ export default function ProfileScreen() {
               <Image 
                 source={{ uri: profilePicture }} 
                 style={styles.avatar}
-                key={profilePicture}
+                key={`${profilePicture}-${Date.now()}`}
               />
             ) : (
               <View style={styles.avatarPlaceholder}>

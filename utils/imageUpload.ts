@@ -138,3 +138,6 @@ export function extractStoragePathFromUrl(
     return null;
   }
 }
+
+// Export types for better TypeScript support
+export type { ImageUploadResult };
