@@ -10,6 +10,7 @@ import {
   Alert,
   ActivityIndicator,
   Image,
+  Modal,
 } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -20,11 +21,14 @@ import { useCreatorData } from '@/hooks/useCreatorData';
 import { IconSymbol } from '@/components/IconSymbol';
 import { uploadImageToStorage, deleteImageFromStorage, extractStoragePathFromUrl } from '@/utils/imageUpload';
 
+const LANGUAGE_OPTIONS = ['English', 'Español'];
+
 export default function ProfileScreen() {
   const { creator, loading: creatorLoading, refetch } = useCreatorData();
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingProfilePic, setIsUploadingProfilePic] = useState(false);
+  const [showLanguageModal, setShowLanguageModal] = useState(false);
 
   // Editable fields
   const [email, setEmail] = useState('');
@@ -276,13 +280,18 @@ export default function ProfileScreen() {
           <View style={styles.fieldContainer}>
             <Text style={styles.fieldLabel}>Language</Text>
             {isEditing ? (
-              <TextInput
-                style={styles.input}
-                value={language}
-                onChangeText={setLanguage}
-                placeholder="e.g., English, Spanish"
-                placeholderTextColor={colors.textSecondary}
-              />
+              <TouchableOpacity
+                style={styles.dropdownButton}
+                onPress={() => setShowLanguageModal(true)}
+              >
+                <Text style={styles.dropdownButtonText}>{language || 'Select language'}</Text>
+                <IconSymbol
+                  ios_icon_name="chevron.down"
+                  android_material_icon_name="arrow_drop_down"
+                  size={20}
+                  color={colors.textSecondary}
+                />
+              </TouchableOpacity>
             ) : (
               <Text style={styles.fieldValue}>{language || 'Not set'}</Text>
             )}
@@ -399,6 +408,46 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         )}
       </ScrollView>
+
+      {/* Language Selection Modal */}
+      <Modal
+        visible={showLanguageModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowLanguageModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowLanguageModal(false)}
+        >
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Select Language</Text>
+            {LANGUAGE_OPTIONS.map((option, index) => (
+              <React.Fragment key={option}>
+                <TouchableOpacity
+                  style={styles.modalOption}
+                  onPress={() => {
+                    setLanguage(option);
+                    setShowLanguageModal(false);
+                  }}
+                >
+                  <Text style={styles.modalOptionText}>{option}</Text>
+                  {language === option && (
+                    <IconSymbol
+                      ios_icon_name="checkmark"
+                      android_material_icon_name="check"
+                      size={20}
+                      color={colors.primary}
+                    />
+                  )}
+                </TouchableOpacity>
+                {index < LANGUAGE_OPTIONS.length - 1 && <View style={styles.modalDivider} />}
+              </React.Fragment>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </>
   );
 }
@@ -518,6 +567,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
+  dropdownButton: {
+    backgroundColor: colors.background,
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  dropdownButtonText: {
+    fontSize: 16,
+    color: colors.text,
+    fontWeight: '500',
+  },
   infoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -605,5 +669,43 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.error,
     textAlign: 'center',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: colors.backgroundAlt,
+    borderRadius: 20,
+    padding: 20,
+    width: '100%',
+    maxWidth: 400,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  modalOption: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 16,
+  },
+  modalOptionText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: colors.text,
+  },
+  modalDivider: {
+    height: 1,
+    backgroundColor: colors.border,
   },
 });
