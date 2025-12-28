@@ -11,7 +11,6 @@ import {
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { colors } from '@/styles/commonStyles';
 import { supabase } from '@/app/integrations/supabase/client';
-import { IconSymbol } from '@/components/IconSymbol';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useFonts, Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold } from '@expo-google-fonts/poppins';
 
@@ -222,53 +221,6 @@ export default function VideoPlayerScreen() {
             <Text style={styles.description}>{videoData.description}</Text>
           )}
 
-          <View style={styles.progressContainer}>
-            <View style={styles.progressHeader}>
-              <Text style={styles.progressLabel}>Your Progress</Text>
-              <Text style={styles.progressPercentage}>
-                {progressPercentage}%
-              </Text>
-            </View>
-            <View style={styles.progressBar}>
-              <View
-                style={[
-                  styles.progressFill,
-                  {
-                    width: `${progressPercentage}%`,
-                  },
-                ]}
-              />
-            </View>
-            <View style={styles.progressFooter}>
-              <Text style={styles.progressTime}>
-                {Math.floor(watchedSeconds / 60)}:{(watchedSeconds % 60).toString().padStart(2, '0')} / {videoData.duration_seconds ? `${Math.floor(videoData.duration_seconds / 60)}:${(videoData.duration_seconds % 60).toString().padStart(2, '0')}` : '--:--'}
-              </Text>
-              {isCompleted && (
-                <View style={styles.completedBadge}>
-                  <IconSymbol
-                    ios_icon_name="checkmark.circle.fill"
-                    android_material_icon_name="check-circle"
-                    size={16}
-                    color={colors.success}
-                  />
-                  <Text style={styles.completedText}>Watched</Text>
-                </View>
-              )}
-            </View>
-          </View>
-
-          <View style={styles.infoBox}>
-            <IconSymbol
-              ios_icon_name="info.circle"
-              android_material_icon_name="info-outline"
-              size={20}
-              color={colors.primary}
-            />
-            <Text style={styles.infoBoxText}>
-              This video has been marked as watched. Continue learning!
-            </Text>
-          </View>
-
           <View style={styles.buttonContainer}>
             <TouchableOpacity
               style={styles.backButton}
@@ -329,81 +281,6 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     lineHeight: 24,
     marginBottom: 24,
-  },
-  progressContainer: {
-    backgroundColor: colors.backgroundAlt,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-  },
-  progressHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  progressLabel: {
-    fontSize: 14,
-    fontFamily: 'Poppins_600SemiBold',
-    color: colors.text,
-  },
-  progressPercentage: {
-    fontSize: 20,
-    fontFamily: 'Poppins_700Bold',
-    color: colors.primary,
-  },
-  progressBar: {
-    height: 8,
-    backgroundColor: colors.grey,
-    borderRadius: 8,
-    overflow: 'hidden',
-    marginBottom: 8,
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: colors.primary,
-    borderRadius: 8,
-  },
-  progressFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  progressTime: {
-    fontSize: 14,
-    fontFamily: 'Poppins_500Medium',
-    color: colors.textSecondary,
-  },
-  completedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(34, 197, 94, 0.1)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  completedText: {
-    fontSize: 13,
-    fontFamily: 'Poppins_600SemiBold',
-    color: colors.success,
-  },
-  infoBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: 'rgba(102, 66, 239, 0.1)',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: colors.primary,
-  },
-  infoBoxText: {
-    flex: 1,
-    fontSize: 13,
-    fontFamily: 'Poppins_500Medium',
-    color: colors.text,
   },
   buttonContainer: {
     gap: 12,
