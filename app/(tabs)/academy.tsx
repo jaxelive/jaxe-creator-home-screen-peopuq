@@ -443,37 +443,14 @@ export default function AcademyScreen() {
     } else if (item.content_type === 'quiz' && item.quiz) {
       console.log('[Academy] Opening quiz:', item.quiz.id);
       
-      // Mark quiz as opened/completed immediately
-      try {
-        const { error } = await supabase
-          .from('user_quiz_attempts')
-          .insert({
-            creator_handle: CREATOR_HANDLE,
-            quiz_id: item.quiz.id,
-            score: 100,
-            passed: true,
-            answers: {},
-          });
-
-        if (!error) {
-          // Update local state
-          setQuizAttempts(prev => {
-            const existing = prev.find(a => a.quiz_id === item.quiz!.id);
-            if (!existing) {
-              return [...prev, {
-                quiz_id: item.quiz!.id,
-                passed: true,
-                score: 100,
-              }];
-            }
-            return prev;
-          });
-        }
-      } catch (error) {
-        console.error('[Academy] Error marking quiz as completed:', error);
-      }
-
-      Alert.alert('Quiz', `Starting quiz: ${item.quiz.title}\n\nQuiz would open here.`);
+      // Navigate to quiz screen
+      router.push({
+        pathname: '/(tabs)/quiz',
+        params: { 
+          quizId: item.quiz.id,
+          quizTitle: item.quiz.title,
+        },
+      });
     }
   };
 
