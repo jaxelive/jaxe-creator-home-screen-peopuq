@@ -31,6 +31,8 @@ export default function ProfileScreen() {
   const [showLanguageModal, setShowLanguageModal] = useState(false);
 
   // Editable fields
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [language, setLanguage] = useState('');
   const [paypalEmail, setPaypalEmail] = useState('');
@@ -45,6 +47,8 @@ export default function ProfileScreen() {
         profile_picture_url: creator.profile_picture_url,
         avatar_url: creator.avatar_url,
       });
+      setFirstName(creator.first_name || '');
+      setLastName(creator.last_name || '');
       setEmail(creator.email || '');
       setLanguage(creator.language || 'English');
       setPaypalEmail(creator.paypal_email || '');
@@ -139,6 +143,8 @@ export default function ProfileScreen() {
 
       // Prepare updates object
       const updates: any = {
+        first_name: firstName,
+        last_name: lastName,
         email,
         language,
         paypal_email: paypalEmail,
@@ -168,6 +174,8 @@ export default function ProfileScreen() {
         // Verify the update
         if (data && data.length > 0) {
           console.log('[Profile] Updated data from database:', {
+            first_name: data[0].first_name,
+            last_name: data[0].last_name,
             profile_picture_url: data[0].profile_picture_url,
             avatar_url: data[0].avatar_url,
           });
@@ -239,6 +247,8 @@ export default function ProfileScreen() {
                 onPress={() => {
                   if (isEditing) {
                     // Cancel editing
+                    setFirstName(creator.first_name || '');
+                    setLastName(creator.last_name || '');
                     setEmail(creator.email || '');
                     setLanguage(creator.language || 'English');
                     setPaypalEmail(creator.paypal_email || '');
@@ -334,6 +344,43 @@ export default function ProfileScreen() {
             {creator.first_name} {creator.last_name}
           </Text>
         </LinearGradient>
+
+        {/* Personal Information */}
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Personal Information</Text>
+          
+          <View style={styles.fieldContainer}>
+            <Text style={styles.fieldLabel}>First Name</Text>
+            {isEditing ? (
+              <TextInput
+                style={styles.input}
+                value={firstName}
+                onChangeText={setFirstName}
+                placeholder="Enter your first name"
+                placeholderTextColor={colors.textSecondary}
+                autoCapitalize="words"
+              />
+            ) : (
+              <Text style={styles.fieldValue}>{firstName || 'Not set'}</Text>
+            )}
+          </View>
+          
+          <View style={styles.fieldContainer}>
+            <Text style={styles.fieldLabel}>Last Name</Text>
+            {isEditing ? (
+              <TextInput
+                style={styles.input}
+                value={lastName}
+                onChangeText={setLastName}
+                placeholder="Enter your last name"
+                placeholderTextColor={colors.textSecondary}
+                autoCapitalize="words"
+              />
+            ) : (
+              <Text style={styles.fieldValue}>{lastName || 'Not set'}</Text>
+            )}
+          </View>
+        </View>
 
         {/* Contact Information */}
         <View style={styles.card}>
