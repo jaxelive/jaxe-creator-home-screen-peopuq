@@ -38,6 +38,17 @@ interface CourseQuiz {
   is_required: boolean;
 }
 
+interface AcademyContent {
+  id: string;
+  title: string;
+  description: string | null;
+  video_url: string | null;
+  thumbnail_url: string | null;
+  stage_order: number;
+  quiz_questions: any[] | null;
+  content_type: 'video' | 'quiz';
+}
+
 interface ContentItem {
   id: string;
   content_type: 'video' | 'quiz';
@@ -97,7 +108,9 @@ export default function AcademyScreen() {
   });
 
   const [courses, setCourses] = useState<Course[]>([]);
+  const [academyContent, setAcademyContent] = useState<AcademyContent[]>([]);
   const [expandedCourseId, setExpandedCourseId] = useState<string | null>(null);
+  const [expandedAcademySection, setExpandedAcademySection] = useState<boolean>(true);
   const [videoProgress, setVideoProgress] = useState<VideoProgress[]>([]);
   const [quizAttempts, setQuizAttempts] = useState<QuizAttempt[]>([]);
   const [liveEvents, setLiveEvents] = useState<LiveEvent[]>([]);
@@ -157,6 +170,39 @@ export default function AcademyScreen() {
         setRegistrations(registrationsData || []);
       }
 
+      // Fetch academy content from incubation_content table
+      console.log('[Academy] Fetching academy content from incubation_content...');
+      const { data: academyData, error: academyError } = await supabase
+        .from('incubation_content')
+        .select('*')
+        .order('stage_order', { ascending: true });
+
+      if (academyError) {
+        console.error('[Academy] Error fetching academy content:', academyError);
+        setError(`Academy content fetch error: ${academyError.message}`);
+      } else {
+        console.log('[Academy] Academy content fetched:', academyData?.length || 0);
+        
+        // Transform academy data to include content type
+        const transformedAcademyData: AcademyContent[] = (academyData || []).map((item: any) => {
+          const hasQuiz = item.quiz_questions && Array.isArray(item.quiz_questions) && item.quiz_questions.length > 0;
+          console.log(`[Academy] Item "${item.title}" - Has video: ${!!item.video_url}, Has quiz: ${hasQuiz}, Quiz questions:`, item.quiz_questions);
+          
+          return {
+            id: item.id,
+            title: item.title,
+            description: item.description,
+            video_url: item.video_url,
+            thumbnail_url: item.thumbnail_url,
+            stage_order: item.stage_order,
+            quiz_questions: item.quiz_questions,
+            content_type: hasQuiz ? 'quiz' : 'video',
+          };
+        });
+        
+        setAcademyContent(transformedAcademyData);
+      }
+
       // Fetch all courses
       console.log('[Academy] Fetching courses...');
       const { data: coursesData, error: coursesError } = await supabase
@@ -168,53 +214,52 @@ export default function AcademyScreen() {
       if (coursesError) {
         console.error('[Academy] Error fetching courses:', coursesError);
         setError(`Courses fetch error: ${coursesError.message}`);
-        throw coursesError;
-      }
+      } else {
+        console.log('[Academy] Courses fetched:', coursesData?.length || 0);
 
-      console.log('[Academy] Courses fetched:', coursesData?.length || 0);
-
-      // For each course, fetch its content items
-      const coursesWithContent: Course[] = [];
-      
-      for (const course of coursesData || []) {
-        console.log(`[Academy] Course: ${course.title} - Cover Image: ${course.cover_image_url || 'None'}`);
+        // For each course, fetch its content items
+        const coursesWithContent: Course[] = [];
         
-        const { data: contentData, error: contentError } = await supabase
-          .from('course_content_items')
-          .select(`
-            *,
-            video:course_videos(*),
-            quiz:course_quizzes(*)
-          `)
-          .eq('course_id', course.id)
-          .order('order_index', { ascending: true });
+        for (const course of coursesData || []) {
+          console.log(`[Academy] Course: ${course.title} - Cover Image: ${course.cover_image_url || 'None'}`);
+          
+          const { data: contentData, error: contentError } = await supabase
+            .from('course_content_items')
+            .select(`
+              *,
+              video:course_videos(*),
+              quiz:course_quizzes(*)
+            `)
+            .eq('course_id', course.id)
+            .order('order_index', { ascending: true });
 
-        if (contentError) {
-          console.error('[Academy] Error fetching content for course:', course.id, contentError);
-          continue;
+          if (contentError) {
+            console.error('[Academy] Error fetching content for course:', course.id, contentError);
+            continue;
+          }
+
+          // Transform data to include video/quiz in the correct structure
+          const transformedContent = contentData?.map((item: any) => ({
+            id: item.id,
+            content_type: item.content_type,
+            order_index: item.order_index,
+            video: item.content_type === 'video' ? item.video : undefined,
+            quiz: item.content_type === 'quiz' ? item.quiz : undefined,
+          })) || [];
+
+          console.log(`[Academy] Course "${course.title}" has ${transformedContent.length} content items`);
+
+          coursesWithContent.push({
+            id: course.id,
+            title: course.title,
+            description: course.description,
+            cover_image_url: course.cover_image_url,
+            contentItems: transformedContent,
+          });
         }
 
-        // Transform data to include video/quiz in the correct structure
-        const transformedContent = contentData?.map((item: any) => ({
-          id: item.id,
-          content_type: item.content_type,
-          order_index: item.order_index,
-          video: item.content_type === 'video' ? item.video : undefined,
-          quiz: item.content_type === 'quiz' ? item.quiz : undefined,
-        })) || [];
-
-        console.log(`[Academy] Course "${course.title}" has ${transformedContent.length} content items`);
-
-        coursesWithContent.push({
-          id: course.id,
-          title: course.title,
-          description: course.description,
-          cover_image_url: course.cover_image_url,
-          contentItems: transformedContent,
-        });
+        setCourses(coursesWithContent);
       }
-
-      setCourses(coursesWithContent);
 
       // Fetch video progress for this creator using creator_handle
       console.log('[Academy] Fetching video progress...');
@@ -235,6 +280,8 @@ export default function AcademyScreen() {
         const progressWithPercentage = progressData?.map((p: any) => {
           // Find the video to get duration
           let duration = 0;
+          
+          // Check in courses
           for (const course of coursesWithContent) {
             const videoItem = course.contentItems.find(
               item => item.content_type === 'video' && item.video?.id === p.video_id
@@ -372,6 +419,10 @@ export default function AcademyScreen() {
     setExpandedCourseId(expandedCourseId === courseId ? null : courseId);
   };
 
+  const toggleAcademySection = () => {
+    setExpandedAcademySection(!expandedAcademySection);
+  };
+
   const isItemCompleted = (item: ContentItem): boolean => {
     if (item.content_type === 'video' && item.video) {
       const progress = videoProgress.find((p) => p.video_id === item.video!.id);
@@ -383,6 +434,14 @@ export default function AcademyScreen() {
       return attempt?.passed || false;
     }
 
+    return false;
+  };
+
+  const isAcademyItemCompleted = (item: AcademyContent): boolean => {
+    if (item.content_type === 'quiz') {
+      const attempt = quizAttempts.find((a) => a.quiz_id === item.id);
+      return attempt?.passed || false;
+    }
     return false;
   };
 
@@ -462,9 +521,49 @@ export default function AcademyScreen() {
     }
   };
 
+  const handleAcademyItemPress = async (item: AcademyContent) => {
+    if (item.content_type === 'quiz' && item.quiz_questions && item.quiz_questions.length > 0) {
+      console.log('[Academy] Opening academy quiz:', item.id, item.title);
+      
+      try {
+        // Navigate to quiz screen with academy quiz ID
+        router.push({
+          pathname: '/(tabs)/quiz',
+          params: { 
+            quizId: item.id,
+            quizTitle: item.title,
+            isAcademyQuiz: 'true',
+          },
+        });
+        console.log('[Academy] Academy quiz navigation initiated');
+      } catch (error) {
+        console.error('[Academy] Error navigating to academy quiz:', error);
+        Alert.alert('Error', 'Failed to open quiz. Please try again.');
+      }
+    } else if (item.video_url) {
+      console.log('[Academy] Opening academy video:', item.id);
+      
+      router.push({
+        pathname: '/(tabs)/video-player',
+        params: { 
+          videoId: item.id,
+          videoUrl: item.video_url,
+          title: item.title,
+          description: item.description || '',
+        },
+      });
+    }
+  };
+
   const getCourseProgress = (course: Course) => {
     const completedItems = course.contentItems.filter(item => isItemCompleted(item)).length;
     const totalItems = course.contentItems.length;
+    return { completed: completedItems, total: totalItems };
+  };
+
+  const getAcademyProgress = () => {
+    const completedItems = academyContent.filter(item => isAcademyItemCompleted(item)).length;
+    const totalItems = academyContent.filter(item => item.content_type === 'quiz').length;
     return { completed: completedItems, total: totalItems };
   };
 
@@ -652,11 +751,133 @@ export default function AcademyScreen() {
           )}
         </View>
 
+        {/* Academy Content Section (from incubation_content) */}
+        {academyContent.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Academy Training</Text>
+            <View style={styles.courseContainer}>
+              <TouchableOpacity
+                style={styles.courseHeader}
+                onPress={toggleAcademySection}
+                activeOpacity={0.7}
+              >
+                <View style={styles.courseThumbnailPlaceholder}>
+                  <IconSymbol
+                    ios_icon_name="graduationcap.fill"
+                    android_material_icon_name="school"
+                    size={32}
+                    color={colors.primary}
+                  />
+                </View>
+                
+                <View style={styles.courseHeaderText}>
+                  <Text style={styles.courseTitle}>JAXE Creator Training</Text>
+                  <Text style={styles.courseProgress}>
+                    {getAcademyProgress().completed} / {getAcademyProgress().total} quizzes completed
+                  </Text>
+                </View>
+                
+                <IconSymbol
+                  ios_icon_name={expandedAcademySection ? "chevron.up" : "chevron.down"}
+                  android_material_icon_name={expandedAcademySection ? "expand-less" : "expand-more"}
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+
+              <View style={styles.courseProgressBar}>
+                <View
+                  style={[
+                    styles.courseProgressFill,
+                    { width: `${getAcademyProgress().total > 0 ? (getAcademyProgress().completed / getAcademyProgress().total) * 100 : 0}%` },
+                  ]}
+                />
+              </View>
+
+              {expandedAcademySection && (
+                <View style={styles.courseContent}>
+                  {academyContent.map((item, index) => {
+                    const isCompleted = isAcademyItemCompleted(item);
+                    const isQuiz = item.content_type === 'quiz';
+
+                    return (
+                      <TouchableOpacity
+                        key={item.id}
+                        style={[
+                          styles.contentCard,
+                          isCompleted && styles.contentCardCompleted,
+                        ]}
+                        onPress={() => handleAcademyItemPress(item)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={styles.contentIndicatorContainer}>
+                          <View style={[
+                            styles.contentIndicatorCircle,
+                            isCompleted && styles.contentIndicatorCircleCompleted,
+                          ]}>
+                            {isCompleted ? (
+                              <IconSymbol
+                                ios_icon_name="checkmark"
+                                android_material_icon_name="check"
+                                size={20}
+                                color="#FFFFFF"
+                              />
+                            ) : (
+                              <Text style={styles.contentIndicatorQuizText}>
+                                {isQuiz ? 'Quiz' : index + 1}
+                              </Text>
+                            )}
+                          </View>
+                        </View>
+
+                        <View style={styles.contentInfo}>
+                          <View style={styles.contentHeader}>
+                            <Text style={styles.contentTitle}>{item.title}</Text>
+                            {isQuiz && (
+                              <View style={styles.requiredBadge}>
+                                <Text style={styles.requiredBadgeText}>QUIZ</Text>
+                              </View>
+                            )}
+                          </View>
+                          
+                          {item.description && (
+                            <Text
+                              style={styles.contentDescription}
+                              numberOfLines={2}
+                            >
+                              {item.description}
+                            </Text>
+                          )}
+                          
+                          {isQuiz && item.quiz_questions && (
+                            <Text style={styles.videoDuration}>
+                              {item.quiz_questions.length} questions
+                            </Text>
+                          )}
+                        </View>
+
+                        <View style={styles.contentArrow}>
+                          <IconSymbol
+                            ios_icon_name="chevron.right"
+                            android_material_icon_name="chevron-right"
+                            size={20}
+                            color="#A0A0A0"
+                          />
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
+            </View>
+          </View>
+        )}
+
         {/* Courses Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Courses</Text>
-          {courses.length > 0 ? (
-            courses.map((course) => {
+        {courses.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Courses</Text>
+            {courses.map((course) => {
               const isExpanded = expandedCourseId === course.id;
               const progress = getCourseProgress(course);
               const progressPercentage = progress.total > 0 
@@ -875,13 +1096,9 @@ export default function AcademyScreen() {
                   )}
                 </View>
               );
-            })
-          ) : (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>No courses available yet</Text>
-            </View>
-          )}
-        </View>
+            })}
+          </View>
+        )}
 
         <View style={styles.infoCard}>
           <IconSymbol
