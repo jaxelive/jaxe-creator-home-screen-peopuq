@@ -251,8 +251,8 @@ export default function QuizComponent({ quizId, creatorHandle, onComplete, onClo
   };
 
   const handleAnswerSelect = async (questionId: string, answerId: string) => {
-    if (questionLocked) {
-      console.log('[QuizComponent] Question locked, ignoring answer selection');
+    if (questionLocked || analyzing) {
+      console.log('[QuizComponent] Question locked or analyzing, ignoring answer selection');
       return;
     }
 
@@ -272,20 +272,17 @@ export default function QuizComponent({ quizId, creatorHandle, onComplete, onClo
 
     // Check if this is the last question
     if (quizData && currentQuestionIndex === quizData.questions.length - 1) {
-      // Last question - immediately show analyzing animation
-      console.log('[QuizComponent] Last question answered, showing analyzing animation');
+      // Last question - IMMEDIATELY show analyzing animation
+      console.log('[QuizComponent] Last question answered, IMMEDIATELY showing analyzing animation');
       
-      // Small delay to show the selection, then immediately switch to analyzing
+      // Set analyzing to true immediately - no delay
+      setAnalyzing(true);
+      
+      // Show analyzing for 2 seconds, then submit
       setTimeout(() => {
-        console.log('[QuizComponent] Setting analyzing to true');
-        setAnalyzing(true);
-        
-        // Show analyzing for 2 seconds, then submit
-        setTimeout(() => {
-          console.log('[QuizComponent] Analyzing complete, submitting quiz');
-          handleSubmit();
-        }, 2000);
-      }, 250);
+        console.log('[QuizComponent] Analyzing complete, submitting quiz');
+        handleSubmit();
+      }, 2000);
     } else {
       // Not the last question - auto-advance after a short delay
       console.log('[QuizComponent] Auto-advancing to next question');
@@ -479,7 +476,7 @@ export default function QuizComponent({ quizId, creatorHandle, onComplete, onClo
     );
   }
 
-  // Show analyzing animation
+  // Show analyzing animation - THIS MUST BE CHECKED BEFORE RENDERING QUESTIONS
   if (analyzing) {
     return (
       <View style={styles.container}>
@@ -652,7 +649,7 @@ export default function QuizComponent({ quizId, creatorHandle, onComplete, onClo
     );
   }
 
-  // Render current question
+  // Render current question - ONLY IF NOT ANALYZING AND NOT SHOWING RESULTS
   const currentQuestion = quizData.questions[currentQuestionIndex];
   const selectedAnswerId = selectedAnswers[currentQuestion.id];
   const totalQuestions = quizData.questions.length;
