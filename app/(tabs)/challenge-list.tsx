@@ -12,7 +12,7 @@ import {
 import { Stack } from 'expo-router';
 import { colors } from '@/styles/commonStyles';
 import { supabase } from '@/app/integrations/supabase/client';
-import { useCreatorData } from '@/hooks/useCreatorData';
+import { useSupabase } from '@/contexts/SupabaseContext';
 import { IconSymbol } from '@/components/IconSymbol';
 import { useFonts, Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold } from '@expo-google-fonts/poppins';
 
@@ -51,7 +51,7 @@ interface UserChallenge {
 }
 
 export default function ChallengeListScreen() {
-  const { creator } = useCreatorData();
+  const { user, session } = useSupabase();
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
     Poppins_500Medium,
@@ -59,7 +59,6 @@ export default function ChallengeListScreen() {
     Poppins_700Bold,
   });
 
-  const [authUserId, setAuthUserId] = useState<string | null>(null);
   const [challenge, setChallenge] = useState<Challenge | null>(null);
   const [challengeDays, setChallengeDays] = useState<ChallengeDay[]>([]);
   const [progress, setProgress] = useState<DayProgress[]>([]);
@@ -75,43 +74,15 @@ export default function ChallengeListScreen() {
     return () => clearInterval(interval);
   }, []);
 
-  // Get auth user ID
-  useEffect(() => {
-    const getAuthUser = async () => {
-      try {
-        const { data: { user }, error } = await supabase.auth.getUser();
-        
-        if (error) {
-          console.error('[Challenge] Error getting auth user:', error);
-        }
-
-        if (user) {
-          console.log('[Challenge] Auth user ID:', user.id);
-          setAuthUserId(user.id);
-        } else {
-          console.warn('[Challenge] No authenticated user found, using fallback');
-          // Fallback: Use the known auth user ID for avelezsanti
-          setAuthUserId('374a33bc-9c6f-4f19-8ebd-1a3bcfcf878b');
-        }
-      } catch (error) {
-        console.error('[Challenge] Error in getAuthUser:', error);
-        // Fallback: Use the known auth user ID for avelezsanti
-        setAuthUserId('374a33bc-9c6f-4f19-8ebd-1a3bcfcf878b');
-      }
-    };
-
-    getAuthUser();
-  }, []);
-
   const fetchChallengeData = useCallback(async () => {
-    if (!authUserId) {
-      console.log('[Challenge] No auth user ID available yet');
+    if (!user) {
+      console.log('[Challenge] No authenticated user');
       return;
     }
 
     try {
       setLoading(true);
-      console.log('[Challenge] Fetching challenge data for user:', authUserId);
+      console.log('[Challenge] Fetching challenge data for user:', user.email);
 
       // Fetch challenge info (with dynamic total_days)
       const { data: challengeData, error: challengeError } = await supabase
@@ -144,7 +115,7 @@ export default function ChallengeListScreen() {
       const { data: userChallengeData, error: userChallengeError } = await supabase
         .from('user_challenge_progress')
         .select('*')
-        .eq('user_id', authUserId)
+        .eq('user_id', user.id)
         .eq('challenge_id', challengeData.id)
         .maybeSingle();
 
@@ -158,8 +129,9 @@ export default function ChallengeListScreen() {
       const { data: progressData, error: progressError } = await supabase
         .from('user_day_progress')
         .select('*')
-        .eq('user_id', authUserId)
-        .eq('challenge_id', challengeData.id);
+        .eq('user_id', user.id)
+        .eq('challenge_id', challengeData.id)
+        .order('day_number', { ascending: true });
 
       if (progressError && progressError.code !== 'PGRST116') {
         console.error('[Challenge] Error fetching progress:', progressError);
@@ -173,13 +145,15 @@ export default function ChallengeListScreen() {
     } finally {
       setLoading(false);
     }
-  }, [authUserId]);
+  }, [user]);
 
   useEffect(() => {
-    if (authUserId) {
+    if (user) {
       fetchChallengeData();
+    } else {
+      setLoading(false);
     }
-  }, [authUserId, fetchChallengeData]);
+  }, [user, fetchChallengeData]);
 
   const getDayStatus = (dayNumber: number): 'locked' | 'active' | 'missed' | 'completed' | 'skipped' => {
     const dayProgress = progress.find((p) => p.day_number === dayNumber);
@@ -283,32 +257,16 @@ export default function ChallengeListScreen() {
   };
 
   const handleStartChallenge = async () => {
-    if (!authUserId || !challenge) {
-      console.error('[Challenge] Cannot start challenge: missing authUserId or challenge');
+    if (!user || !challenge) {
+      console.error('[Challenge] Cannot start challenge: missing user or challenge');
       Alert.alert('Error', 'Unable to start challenge. Please try again.');
       return;
     }
 
     try {
-      console.log('[Challenge] Starting challenge for user:', authUserId);
+      console.log('[Challenge] Starting challenge for user:', user.email);
       const now = new Date().toISOString();
       const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-
-      // Create user challenge
-      const { error: challengeError } = await supabase
-        .from('user_challenge_progress')
-        .insert({
-          user_id: authUserId,
-          challenge_id: challenge.id,
-          status: 'in_progress',
-          started_at: now,
-          current_day: 1,
-        });
-
-      if (challengeError) {
-        console.error('[Challenge] Error creating user challenge:', challengeError);
-        throw challengeError;
-      }
 
       // Get day 1 info
       const day1 = challengeDays.find((d) => d.day_number === 1);
@@ -317,17 +275,40 @@ export default function ChallengeListScreen() {
         throw new Error('Day 1 not found');
       }
 
-      // Create day 1 progress
+      // Create user challenge
+      const { error: challengeError } = await supabase
+        .from('user_challenge_progress')
+        .upsert({
+          user_id: user.id,
+          challenge_id: challenge.id,
+          status: 'in_progress',
+          started_at: now,
+          current_day: 1,
+          completed_days: 0,
+        }, {
+          onConflict: 'user_id,challenge_id',
+        });
+
+      if (challengeError) {
+        console.error('[Challenge] Error creating user challenge:', challengeError);
+        throw challengeError;
+      }
+
+      // Create day 1 progress (using day_id for unique constraint)
       const { error: progressError } = await supabase
         .from('user_day_progress')
-        .insert({
-          user_id: authUserId,
+        .upsert({
+          user_id: user.id,
           challenge_id: challenge.id,
           day_id: day1.id,
           day_number: 1,
           status: 'active',
           available_at: now,
           expires_at: expiresAt,
+          user_marked_complete: false,
+          admin_validated: false,
+        }, {
+          onConflict: 'user_id,day_id',
         });
 
       if (progressError) {
@@ -346,7 +327,7 @@ export default function ChallengeListScreen() {
   };
 
   const handleCompleteDay = async (day: ChallengeDay) => {
-    if (!authUserId || !challenge) return;
+    if (!user || !challenge) return;
 
     const status = getDayStatus(day.day_number);
     if (status !== 'active' && status !== 'missed') return;
@@ -357,6 +338,11 @@ export default function ChallengeListScreen() {
       const dayProgress = progress.find((p) => p.day_number === day.day_number);
       const isLate = status === 'missed';
 
+      if (!dayProgress) {
+        console.error('[Challenge] Day progress not found');
+        return;
+      }
+
       // Mark day as completed
       const { error: updateError } = await supabase
         .from('user_day_progress')
@@ -364,16 +350,28 @@ export default function ChallengeListScreen() {
           status: 'completed',
           completed_at: now,
           completed_late: isLate,
+          user_marked_complete: true,
         })
-        .eq('id', dayProgress!.id);
+        .eq('id', dayProgress.id);
 
       if (updateError) {
         console.error('[Challenge] Error updating day progress:', updateError);
         throw updateError;
       }
 
+      // Update user challenge progress
+      const completedCount = progress.filter((p) => p.status === 'completed').length + 1;
+      await supabase
+        .from('user_challenge_progress')
+        .update({
+          completed_days: completedCount,
+          current_day: Math.min(day.day_number + 1, challenge.total_days),
+        })
+        .eq('user_id', user.id)
+        .eq('challenge_id', challenge.id);
+
       // Unlock next day if exists
-      if (day.day_number < (challenge.total_days || 21)) {
+      if (day.day_number < challenge.total_days) {
         const nextDay = challengeDays.find((d) => d.day_number === day.day_number + 1);
         if (nextDay) {
           const nextAvailableAt = new Date().toISOString();
@@ -395,13 +393,15 @@ export default function ChallengeListScreen() {
             await supabase
               .from('user_day_progress')
               .insert({
-                user_id: authUserId,
+                user_id: user.id,
                 challenge_id: challenge.id,
                 day_id: nextDay.id,
                 day_number: nextDay.day_number,
                 status: 'active',
                 available_at: nextAvailableAt,
                 expires_at: nextExpiresAt,
+                user_marked_complete: false,
+                admin_validated: false,
               });
           }
         }
@@ -418,7 +418,7 @@ export default function ChallengeListScreen() {
   };
 
   const handleSkipDay = async (day: ChallengeDay) => {
-    if (!authUserId || !challenge) return;
+    if (!user || !challenge) return;
 
     const status = getDayStatus(day.day_number);
     if (status !== 'missed') return;
@@ -428,6 +428,11 @@ export default function ChallengeListScreen() {
       const now = new Date().toISOString();
       const dayProgress = progress.find((p) => p.day_number === day.day_number);
 
+      if (!dayProgress) {
+        console.error('[Challenge] Day progress not found');
+        return;
+      }
+
       // Mark day as skipped
       const { error: updateError } = await supabase
         .from('user_day_progress')
@@ -435,7 +440,7 @@ export default function ChallengeListScreen() {
           status: 'skipped',
           skipped_at: now,
         })
-        .eq('id', dayProgress!.id);
+        .eq('id', dayProgress.id);
 
       if (updateError) {
         console.error('[Challenge] Error skipping day:', updateError);
@@ -443,7 +448,7 @@ export default function ChallengeListScreen() {
       }
 
       // Unlock next day if exists
-      if (day.day_number < (challenge.total_days || 21)) {
+      if (day.day_number < challenge.total_days) {
         const nextDay = challengeDays.find((d) => d.day_number === day.day_number + 1);
         if (nextDay) {
           const nextAvailableAt = new Date().toISOString();
@@ -464,13 +469,15 @@ export default function ChallengeListScreen() {
             await supabase
               .from('user_day_progress')
               .insert({
-                user_id: authUserId,
+                user_id: user.id,
                 challenge_id: challenge.id,
                 day_id: nextDay.id,
                 day_number: nextDay.day_number,
                 status: 'active',
                 available_at: nextAvailableAt,
                 expires_at: nextExpiresAt,
+                user_marked_complete: false,
+                admin_validated: false,
               });
           }
         }
@@ -491,7 +498,7 @@ export default function ChallengeListScreen() {
   const progressPercentage = (completedCount / totalDays) * 100;
   const hasStarted = !!userChallenge;
 
-  if (loading || !fontsLoaded || !authUserId) {
+  if (loading || !fontsLoaded) {
     return (
       <View style={styles.container}>
         <Stack.Screen
@@ -505,6 +512,33 @@ export default function ChallengeListScreen() {
         <View style={styles.centerContent}>
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.loadingText}>Loading challenge...</Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (!user || !session) {
+    return (
+      <View style={styles.container}>
+        <Stack.Screen
+          options={{
+            title: 'Challenge',
+            headerShown: true,
+            headerStyle: { backgroundColor: colors.background },
+            headerTintColor: colors.text,
+          }}
+        />
+        <View style={styles.centerContent}>
+          <IconSymbol
+            ios_icon_name="person.crop.circle.badge.exclamationmark"
+            android_material_icon_name="person-off"
+            size={64}
+            color={colors.textSecondary}
+          />
+          <Text style={styles.errorText}>Authentication Required</Text>
+          <Text style={styles.errorSubtext}>
+            Please sign in to access the 21-Day Challenge
+          </Text>
         </View>
       </View>
     );

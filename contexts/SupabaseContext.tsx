@@ -2,24 +2,68 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/app/integrations/supabase/client';
+import { Alert } from 'react-native';
 
 interface SupabaseContextType {
   session: Session | null;
   user: User | null;
   loading: boolean;
   isConfigured: boolean;
+  signIn: (email: string, password: string) => Promise<void>;
+  signOut: () => Promise<void>;
 }
 
 const SupabaseContext = createContext<SupabaseContextType | undefined>(undefined);
 
-// Known auth user ID for avelezsanti from the database
-const AVELEZSANTI_AUTH_USER_ID = '374a33bc-9c6f-4f19-8ebd-1a3bcfcf878b';
-const AVELEZSANTI_EMAIL = 'avelezsanti@placeholder.com';
+// Known test account for development
+const TEST_EMAIL = 'avelezsanti@placeholder.com';
+const TEST_PASSWORD = 'test123456';
 
 export const SupabaseProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const signIn = async (email: string, password: string) => {
+    try {
+      console.log('[SupabaseContext] Signing in user:', email);
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        console.error('[SupabaseContext] Sign in error:', error);
+        throw error;
+      }
+
+      console.log('[SupabaseContext] Sign in successful');
+      setSession(data.session);
+      setUser(data.user);
+    } catch (error: any) {
+      console.error('[SupabaseContext] Sign in failed:', error);
+      Alert.alert('Sign In Failed', error.message || 'Unknown error');
+      throw error;
+    }
+  };
+
+  const signOut = async () => {
+    try {
+      console.log('[SupabaseContext] Signing out');
+      const { error } = await supabase.auth.signOut();
+      
+      if (error) {
+        console.error('[SupabaseContext] Sign out error:', error);
+        throw error;
+      }
+
+      setSession(null);
+      setUser(null);
+    } catch (error: any) {
+      console.error('[SupabaseContext] Sign out failed:', error);
+      Alert.alert('Sign Out Failed', error.message || 'Unknown error');
+    }
+  };
 
   useEffect(() => {
     console.log('[SupabaseContext] Initializing authentication');
@@ -36,44 +80,28 @@ export const SupabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setUser(existingSession.user);
         setLoading(false);
       } else {
-        console.log('[SupabaseContext] No existing session, creating mock session with real user ID');
-        // Create a mock session with the real auth user ID
-        // This allows the app to work with RLS policies that use auth.uid()
-        const mockUser: User = {
-          id: AVELEZSANTI_AUTH_USER_ID,
-          email: AVELEZSANTI_EMAIL,
-          app_metadata: {},
-          user_metadata: {},
-          aud: 'authenticated',
-          created_at: new Date().toISOString(),
-          role: 'authenticated',
-        } as User;
-
-        const mockSession: Session = {
-          access_token: 'mock-token-' + AVELEZSANTI_AUTH_USER_ID,
-          refresh_token: 'mock-refresh-token',
-          expires_in: 3600,
-          expires_at: Date.now() + 3600000,
-          token_type: 'bearer',
-          user: mockUser,
-        } as Session;
-
-        // Try to set the session in Supabase client
-        // This won't work for RLS but will set the user context
+        console.log('[SupabaseContext] No existing session, attempting auto sign-in for development');
+        
+        // For development: Auto sign-in with test account
         try {
-          await supabase.auth.setSession({
-            access_token: mockSession.access_token,
-            refresh_token: mockSession.refresh_token,
+          const { data, error: signInError } = await supabase.auth.signInWithPassword({
+            email: TEST_EMAIL,
+            password: TEST_PASSWORD,
           });
+
+          if (signInError) {
+            console.error('[SupabaseContext] Auto sign-in failed:', signInError);
+            console.log('[SupabaseContext] User needs to sign in manually');
+          } else if (data.session) {
+            console.log('[SupabaseContext] Auto sign-in successful');
+            setSession(data.session);
+            setUser(data.user);
+          }
         } catch (err) {
-          console.log('[SupabaseContext] Could not set mock session in auth client:', err);
+          console.error('[SupabaseContext] Auto sign-in error:', err);
         }
-
-        setUser(mockUser);
-        setSession(mockSession);
+        
         setLoading(false);
-
-        console.log('[SupabaseContext] Mock session created with real user ID:', AVELEZSANTI_AUTH_USER_ID);
       }
     });
 
@@ -96,6 +124,8 @@ export const SupabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         user,
         loading,
         isConfigured: true,
+        signIn,
+        signOut,
       }}
     >
       {children}
