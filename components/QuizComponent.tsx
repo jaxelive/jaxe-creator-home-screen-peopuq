@@ -9,10 +9,27 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import Animated, {
+  FadeIn,
+  FadeOut,
+  SlideInRight,
+  SlideOutLeft,
+  ZoomIn,
+  ZoomOut,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+  withSequence,
+  Easing,
+  interpolate,
+} from 'react-native-reanimated';
 import { colors } from '@/styles/commonStyles';
 import { supabase } from '@/app/integrations/supabase/client';
 import { IconSymbol } from '@/components/IconSymbol';
 import { useFonts, Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold } from '@expo-google-fonts/poppins';
+import { LinearGradient } from 'expo-linear-gradient';
+import * as Haptics from 'expo-haptics';
 
 interface QuizAnswer {
   id: string;
@@ -65,6 +82,11 @@ export default function QuizComponent({ quizId, creatorHandle, onComplete, onClo
   const [correctCount, setCorrectCount] = useState(0);
   const [submitting, setSubmitting] = useState(false);
 
+  // Animation values
+  const progressValue = useSharedValue(0);
+  const analyzingProgress = useSharedValue(0);
+  const scoreAnimValue = useSharedValue(0);
+
   useEffect(() => {
     console.log('[QuizComponent] Mounted with quizId:', quizId, 'creatorHandle:', creatorHandle);
     if (!quizId) {
@@ -76,6 +98,39 @@ export default function QuizComponent({ quizId, creatorHandle, onComplete, onClo
     
     fetchQuizData();
   }, [quizId]);
+
+  // Animate progress bar
+  useEffect(() => {
+    if (quizData) {
+      const targetProgress = ((currentQuestionIndex + 1) / quizData.questions.length) * 100;
+      progressValue.value = withSpring(targetProgress, {
+        damping: 15,
+        stiffness: 100,
+      });
+    }
+  }, [currentQuestionIndex, quizData]);
+
+  // Animate analyzing progress
+  useEffect(() => {
+    if (analyzing) {
+      analyzingProgress.value = 0;
+      analyzingProgress.value = withTiming(100, {
+        duration: 2000,
+        easing: Easing.bezier(0.25, 0.1, 0.25, 1),
+      });
+    }
+  }, [analyzing]);
+
+  // Animate score counting
+  useEffect(() => {
+    if (showResults) {
+      scoreAnimValue.value = 0;
+      scoreAnimValue.value = withTiming(score, {
+        duration: 1500,
+        easing: Easing.out(Easing.cubic),
+      });
+    }
+  }, [showResults, score]);
 
   const fetchQuizData = async () => {
     try {
@@ -202,6 +257,9 @@ export default function QuizComponent({ quizId, creatorHandle, onComplete, onClo
     }
 
     console.log('[QuizComponent] Answer selected:', { questionId, answerId });
+    
+    // Haptic feedback
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     
     // Lock the question to prevent double-taps
     setQuestionLocked(true);
@@ -337,6 +395,7 @@ export default function QuizComponent({ quizId, creatorHandle, onComplete, onClo
 
   const handleRetry = () => {
     console.log('[QuizComponent] Retrying quiz');
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setCurrentQuestionIndex(0);
     setSelectedAnswers({});
     setShowResults(false);
@@ -346,13 +405,34 @@ export default function QuizComponent({ quizId, creatorHandle, onComplete, onClo
     setAnalyzing(false);
   };
 
+  const progressAnimStyle = useAnimatedStyle(() => {
+    return {
+      width: `${progressValue.value}%`,
+    };
+  });
+
+  const analyzingProgressStyle = useAnimatedStyle(() => {
+    return {
+      width: `${analyzingProgress.value}%`,
+    };
+  });
+
+  const scoreCountStyle = useAnimatedStyle(() => {
+    return {
+      opacity: interpolate(scoreAnimValue.value, [0, score], [0, 1]),
+    };
+  });
+
   if (loading || !fontsLoaded) {
     return (
       <View style={styles.container}>
-        <View style={styles.centerContent}>
+        <Animated.View 
+          entering={FadeIn.duration(300)}
+          style={styles.centerContent}
+        >
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.loadingText}>Loading quiz...</Text>
-        </View>
+        </Animated.View>
       </View>
     );
   }
@@ -360,7 +440,10 @@ export default function QuizComponent({ quizId, creatorHandle, onComplete, onClo
   if (error || !quizData) {
     return (
       <View style={styles.container}>
-        <View style={styles.centerContent}>
+        <Animated.View 
+          entering={ZoomIn.duration(400)}
+          style={styles.centerContent}
+        >
           <IconSymbol
             ios_icon_name="exclamationmark.triangle.fill"
             android_material_icon_name="error"
@@ -374,13 +457,18 @@ export default function QuizComponent({ quizId, creatorHandle, onComplete, onClo
           <TouchableOpacity 
             style={styles.retryButton} 
             onPress={fetchQuizData}
+            activeOpacity={0.8}
           >
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+          <TouchableOpacity 
+            style={styles.closeButton} 
+            onPress={onClose}
+            activeOpacity={0.8}
+          >
             <Text style={styles.closeButtonText}>Close</Text>
           </TouchableOpacity>
-        </View>
+        </Animated.View>
       </View>
     );
   }
@@ -389,11 +477,62 @@ export default function QuizComponent({ quizId, creatorHandle, onComplete, onClo
   if (analyzing) {
     return (
       <View style={styles.container}>
-        <View style={styles.centerContent}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.analyzingTitle}>Analyzing your answers...</Text>
-          <Text style={styles.analyzingSubtitle}>Calculating your score</Text>
-        </View>
+        <Animated.View 
+          entering={FadeIn.duration(300)}
+          style={styles.centerContent}
+        >
+          <Animated.View
+            entering={ZoomIn.springify().damping(15)}
+            style={styles.analyzingIconContainer}
+          >
+            <ActivityIndicator size="large" color={colors.primary} />
+          </Animated.View>
+          
+          <Animated.Text 
+            entering={FadeIn.delay(200).duration(400)}
+            style={styles.analyzingTitle}
+          >
+            Analyzing your answers...
+          </Animated.Text>
+          
+          <Animated.Text 
+            entering={FadeIn.delay(400).duration(400)}
+            style={styles.analyzingSubtitle}
+          >
+            Calculating your score
+          </Animated.Text>
+
+          <Animated.View 
+            entering={FadeIn.delay(600).duration(400)}
+            style={styles.analyzingProgressContainer}
+          >
+            <View style={styles.analyzingProgressBar}>
+              <Animated.View 
+                style={[styles.analyzingProgressFill, analyzingProgressStyle]} 
+              />
+            </View>
+            <View style={styles.analyzingSteps}>
+              <Animated.Text 
+                entering={FadeIn.delay(800).duration(300)}
+                style={styles.analyzingStep}
+              >
+                ✓ Checking accuracy
+              </Animated.Text>
+              <Animated.Text 
+                entering={FadeIn.delay(1200).duration(300)}
+                style={styles.analyzingStep}
+              >
+                ✓ Applying pass threshold
+              </Animated.Text>
+              <Animated.Text 
+                entering={FadeIn.delay(1600).duration(300)}
+                style={styles.analyzingStep}
+              >
+                ✓ Preparing results
+              </Animated.Text>
+            </View>
+          </Animated.View>
+        </Animated.View>
       </View>
     );
   }
@@ -416,42 +555,72 @@ export default function QuizComponent({ quizId, creatorHandle, onComplete, onClo
           <View style={styles.backButton} />
         </View>
 
-        <View style={[styles.resultsCard, passed ? styles.passedCard : styles.failedCard]}>
-          <View style={styles.resultsIconContainer}>
+        <Animated.View 
+          entering={ZoomIn.springify().damping(15).delay(100)}
+          style={[styles.resultsCard, passed ? styles.passedCard : styles.failedCard]}
+        >
+          <Animated.View 
+            entering={ZoomIn.springify().damping(12).delay(300)}
+            style={styles.resultsIconContainer}
+          >
             <IconSymbol
               ios_icon_name={passed ? "checkmark.circle.fill" : "xmark.circle.fill"}
               android_material_icon_name={passed ? "check-circle" : "cancel"}
               size={80}
               color={passed ? colors.primary : colors.error}
             />
-          </View>
+          </Animated.View>
 
-          <Text style={styles.resultsTitle}>
+          <Animated.Text 
+            entering={FadeIn.delay(500).duration(400)}
+            style={styles.resultsTitle}
+          >
             {passed ? 'Congratulations!' : 'Not Quite There'}
-          </Text>
+          </Animated.Text>
 
-          <Text style={styles.resultsSubtitle}>
+          <Animated.Text 
+            entering={FadeIn.delay(600).duration(400)}
+            style={styles.resultsSubtitle}
+          >
             {passed
               ? 'You passed the quiz!'
               : 'You need more correct answers to pass.'}
-          </Text>
+          </Animated.Text>
 
-          <View style={styles.scoreContainer}>
+          <Animated.View 
+            entering={FadeIn.delay(700).duration(400)}
+            style={styles.scoreContainer}
+          >
             <Text style={styles.scoreLabel}>Your Score</Text>
-            <Text style={styles.scoreValue}>{score}%</Text>
-            <Text style={styles.scoreDetails}>
+            
+            <Animated.View style={styles.scoreCircle}>
+              <Animated.Text style={[styles.scoreValue, scoreCountStyle]}>
+                {score}%
+              </Animated.Text>
+            </Animated.View>
+            
+            <Animated.Text 
+              entering={FadeIn.delay(1200).duration(400)}
+              style={styles.scoreDetails}
+            >
               {correctCount} out of {quizData.questions.length} correct
-            </Text>
-            <Text style={styles.scoreRequirement}>
+            </Animated.Text>
+            <Animated.Text 
+              entering={FadeIn.delay(1400).duration(400)}
+              style={styles.scoreRequirement}
+            >
               Required: {quizData.required_correct_answers} correct answers ({Math.round((quizData.required_correct_answers / quizData.questions.length) * 100)}%)
-            </Text>
-          </View>
+            </Animated.Text>
+          </Animated.View>
 
-          <View style={styles.resultsButtons}>
+          <Animated.View 
+            entering={FadeIn.delay(1600).duration(400)}
+            style={styles.resultsButtons}
+          >
             <TouchableOpacity
               style={styles.retryButtonLarge}
               onPress={handleRetry}
-              activeOpacity={0.7}
+              activeOpacity={0.8}
             >
               <IconSymbol
                 ios_icon_name="arrow.clockwise"
@@ -465,14 +634,14 @@ export default function QuizComponent({ quizId, creatorHandle, onComplete, onClo
             <TouchableOpacity
               style={styles.doneButton}
               onPress={onClose}
-              activeOpacity={0.7}
+              activeOpacity={0.8}
             >
               <Text style={styles.doneButtonText}>
                 {passed ? 'Continue Learning' : 'Back to Academy'}
               </Text>
             </TouchableOpacity>
-          </View>
-        </View>
+          </Animated.View>
+        </Animated.View>
       </ScrollView>
     );
   }
@@ -481,10 +650,17 @@ export default function QuizComponent({ quizId, creatorHandle, onComplete, onClo
   const currentQuestion = quizData.questions[currentQuestionIndex];
   const selectedAnswerId = selectedAnswers[currentQuestion.id];
   const totalQuestions = quizData.questions.length;
-  const progress = ((currentQuestionIndex + 1) / totalQuestions) * 100;
 
   return (
     <View style={styles.container}>
+      {/* Animated background gradient */}
+      <LinearGradient
+        colors={['rgba(102, 66, 239, 0.03)', 'rgba(0, 0, 0, 0)']}
+        style={styles.backgroundGradient}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      />
+
       <View style={styles.header}>
         <TouchableOpacity onPress={onClose} style={styles.backButton}>
           <IconSymbol
@@ -498,56 +674,56 @@ export default function QuizComponent({ quizId, creatorHandle, onComplete, onClo
         <View style={styles.backButton} />
       </View>
 
-      <View style={styles.progressContainer}>
+      <Animated.View 
+        entering={FadeIn.duration(300)}
+        style={styles.progressContainer}
+      >
         <View style={styles.progressBar}>
-          <View style={[styles.progressFill, { width: `${progress}%` }]} />
+          <Animated.View style={[styles.progressFill, progressAnimStyle]} />
         </View>
         <Text style={styles.progressText}>
           Question {currentQuestionIndex + 1} of {totalQuestions}
         </Text>
-      </View>
+      </Animated.View>
 
       <ScrollView style={styles.quizContent} contentContainerStyle={styles.quizContentContainer}>
-        <Text style={styles.questionText}>
-          {currentQuestion.question_text}
-        </Text>
+        <Animated.View
+          key={`question-${currentQuestionIndex}`}
+          entering={SlideInRight.duration(250).springify().damping(15)}
+          exiting={SlideOutLeft.duration(200)}
+        >
+          <Animated.View 
+            entering={FadeIn.delay(100).duration(300)}
+            style={styles.questionCard}
+          >
+            <Text style={styles.questionText}>
+              {currentQuestion.question_text}
+            </Text>
+          </Animated.View>
 
-        <View style={styles.answersContainer}>
-          {currentQuestion.answers.map((answer: QuizAnswer) => {
-            const isSelected = selectedAnswerId === answer.id;
+          <View style={styles.answersContainer}>
+            {currentQuestion.answers.map((answer: QuizAnswer, index: number) => {
+              const isSelected = selectedAnswerId === answer.id;
 
-            return (
-              <TouchableOpacity
-                key={answer.id}
-                style={[
-                  styles.answerCard,
-                  isSelected && styles.answerCardSelected,
-                ]}
-                onPress={() => handleAnswerSelect(currentQuestion.id, answer.id)}
-                activeOpacity={0.7}
-                disabled={questionLocked}
-              >
-                <View style={[
-                  styles.answerRadio,
-                  isSelected && styles.answerRadioSelected,
-                ]}>
-                  {isSelected && (
-                    <View style={styles.answerRadioInner} />
-                  )}
-                </View>
-                <Text style={[
-                  styles.answerText,
-                  isSelected && styles.answerTextSelected,
-                ]}>
-                  {answer.answer_text}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+              return (
+                <AnimatedAnswerCard
+                  key={answer.id}
+                  answer={answer}
+                  isSelected={isSelected}
+                  onPress={() => handleAnswerSelect(currentQuestion.id, answer.id)}
+                  disabled={questionLocked}
+                  index={index}
+                />
+              );
+            })}
+          </View>
+        </Animated.View>
       </ScrollView>
 
-      <View style={styles.navigationContainer}>
+      <Animated.View 
+        entering={FadeIn.delay(200).duration(300)}
+        style={styles.navigationContainer}
+      >
         <TouchableOpacity
           style={[
             styles.navButton,
@@ -584,8 +760,109 @@ export default function QuizComponent({ quizId, creatorHandle, onComplete, onClo
             </Text>
           </View>
         )}
-      </View>
+      </Animated.View>
     </View>
+  );
+}
+
+// Animated Answer Card Component
+function AnimatedAnswerCard({ 
+  answer, 
+  isSelected, 
+  onPress, 
+  disabled,
+  index 
+}: { 
+  answer: QuizAnswer; 
+  isSelected: boolean; 
+  onPress: () => void; 
+  disabled: boolean;
+  index: number;
+}) {
+  const scale = useSharedValue(1);
+  const opacity = useSharedValue(1);
+
+  const animatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ scale: scale.value }],
+      opacity: opacity.value,
+    };
+  });
+
+  const handlePressIn = () => {
+    scale.value = withSpring(0.98, { damping: 15 });
+    opacity.value = withTiming(0.8, { duration: 100 });
+  };
+
+  const handlePressOut = () => {
+    scale.value = withSequence(
+      withSpring(1.02, { damping: 10 }),
+      withSpring(1, { damping: 15 })
+    );
+    opacity.value = withTiming(1, { duration: 150 });
+  };
+
+  return (
+    <Animated.View
+      entering={FadeIn.delay(150 + index * 80).duration(300)}
+      style={animatedStyle}
+    >
+      <TouchableOpacity
+        style={[
+          styles.answerCard,
+          isSelected && styles.answerCardSelected,
+        ]}
+        onPress={onPress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        activeOpacity={1}
+        disabled={disabled}
+      >
+        {isSelected && (
+          <LinearGradient
+            colors={['rgba(102, 66, 239, 0.15)', 'rgba(102, 66, 239, 0.05)']}
+            style={styles.answerCardGradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          />
+        )}
+        
+        <Animated.View 
+          style={[
+            styles.answerRadio,
+            isSelected && styles.answerRadioSelected,
+          ]}
+        >
+          {isSelected && (
+            <Animated.View 
+              entering={ZoomIn.springify().damping(12)}
+              style={styles.answerRadioInner} 
+            />
+          )}
+        </Animated.View>
+        
+        <Text style={[
+          styles.answerText,
+          isSelected && styles.answerTextSelected,
+        ]}>
+          {answer.answer_text}
+        </Text>
+
+        {isSelected && (
+          <Animated.View 
+            entering={FadeIn.duration(200)}
+            style={styles.answerCheckmark}
+          >
+            <IconSymbol
+              ios_icon_name="checkmark"
+              android_material_icon_name="check"
+              size={16}
+              color={colors.primary}
+            />
+          </Animated.View>
+        )}
+      </TouchableOpacity>
+    </Animated.View>
   );
 }
 
@@ -593,6 +870,13 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  backgroundGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 400,
   },
   centerContent: {
     flex: 1,
@@ -610,6 +894,9 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_500Medium',
     color: colors.textSecondary,
   },
+  analyzingIconContainer: {
+    marginBottom: 24,
+  },
   analyzingTitle: {
     marginTop: 24,
     fontSize: 24,
@@ -620,6 +907,32 @@ const styles = StyleSheet.create({
   analyzingSubtitle: {
     marginTop: 8,
     fontSize: 16,
+    fontFamily: 'Poppins_500Medium',
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  analyzingProgressContainer: {
+    width: '100%',
+    maxWidth: 300,
+    marginTop: 32,
+  },
+  analyzingProgressBar: {
+    height: 6,
+    backgroundColor: colors.grey,
+    borderRadius: 6,
+    overflow: 'hidden',
+    marginBottom: 24,
+  },
+  analyzingProgressFill: {
+    height: '100%',
+    backgroundColor: colors.primary,
+    borderRadius: 6,
+  },
+  analyzingSteps: {
+    gap: 12,
+  },
+  analyzingStep: {
+    fontSize: 14,
     fontFamily: 'Poppins_500Medium',
     color: colors.textSecondary,
     textAlign: 'center',
@@ -648,6 +961,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: colors.grey,
+    backgroundColor: colors.background,
   },
   backButton: {
     width: 40,
@@ -665,6 +979,7 @@ const styles = StyleSheet.create({
   progressContainer: {
     paddingHorizontal: 20,
     paddingVertical: 16,
+    backgroundColor: colors.background,
   },
   progressBar: {
     height: 8,
@@ -690,28 +1005,50 @@ const styles = StyleSheet.create({
   quizContentContainer: {
     padding: 20,
   },
+  questionCard: {
+    backgroundColor: colors.backgroundAlt,
+    borderRadius: 20,
+    padding: 24,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: colors.grey,
+    boxShadow: '0px 4px 16px rgba(0, 0, 0, 0.3)',
+    elevation: 3,
+  },
   questionText: {
     fontSize: 20,
     fontFamily: 'Poppins_600SemiBold',
     color: colors.text,
-    lineHeight: 28,
-    marginBottom: 24,
+    lineHeight: 30,
   },
   answersContainer: {
-    gap: 12,
+    gap: 14,
   },
   answerCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.backgroundAlt,
     borderRadius: 16,
-    padding: 16,
+    padding: 18,
     borderWidth: 2,
-    borderColor: 'transparent',
+    borderColor: colors.grey,
+    position: 'relative',
+    overflow: 'hidden',
+    boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.2)',
+    elevation: 2,
+  },
+  answerCardGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   answerCardSelected: {
     borderColor: colors.primary,
-    backgroundColor: 'rgba(102, 66, 239, 0.1)',
+    backgroundColor: colors.backgroundCard,
+    boxShadow: '0px 4px 16px rgba(102, 66, 239, 0.3)',
+    elevation: 4,
   },
   answerRadio: {
     width: 24,
@@ -719,12 +1056,14 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 2,
     borderColor: colors.grey,
-    marginRight: 12,
+    marginRight: 14,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: colors.background,
   },
   answerRadioSelected: {
     borderColor: colors.primary,
+    backgroundColor: colors.background,
   },
   answerRadioInner: {
     width: 12,
@@ -737,10 +1076,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Poppins_500Medium',
     color: colors.text,
-    lineHeight: 22,
+    lineHeight: 24,
   },
   answerTextSelected: {
     color: colors.primary,
+    fontFamily: 'Poppins_600SemiBold',
+  },
+  answerCheckmark: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(102, 66, 239, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
   },
   navigationContainer: {
     flexDirection: 'row',
@@ -751,6 +1100,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.grey,
     gap: 12,
+    backgroundColor: colors.background,
   },
   navButton: {
     flexDirection: 'row',
@@ -777,30 +1127,13 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_500Medium',
     color: colors.textSecondary,
   },
-  submitButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 12,
-    backgroundColor: colors.primary,
-    flex: 1,
-    justifyContent: 'center',
-  },
-  submitButtonDisabled: {
-    opacity: 0.6,
-  },
-  submitButtonText: {
-    fontSize: 16,
-    fontFamily: 'Poppins_700Bold',
-    color: '#FFFFFF',
-  },
   resultsCard: {
     backgroundColor: colors.backgroundAlt,
     borderRadius: 24,
     padding: 32,
     alignItems: 'center',
+    boxShadow: '0px 8px 32px rgba(0, 0, 0, 0.4)',
+    elevation: 6,
   },
   passedCard: {
     borderWidth: 3,
@@ -836,13 +1169,25 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Poppins_500Medium',
     color: colors.textSecondary,
-    marginBottom: 8,
+    marginBottom: 16,
+  },
+  scoreCircle: {
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    backgroundColor: colors.backgroundCard,
+    borderWidth: 8,
+    borderColor: colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+    boxShadow: '0px 8px 24px rgba(102, 66, 239, 0.3)',
+    elevation: 5,
   },
   scoreValue: {
-    fontSize: 64,
+    fontSize: 48,
     fontFamily: 'Poppins_700Bold',
     color: colors.primary,
-    marginBottom: 8,
   },
   scoreDetails: {
     fontSize: 18,
@@ -865,6 +1210,8 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingHorizontal: 32,
     marginBottom: 12,
+    boxShadow: '0px 4px 16px rgba(102, 66, 239, 0.4)',
+    elevation: 4,
   },
   retryButtonText: {
     fontSize: 16,
@@ -880,6 +1227,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     borderRadius: 16,
     padding: 16,
+    boxShadow: '0px 4px 16px rgba(102, 66, 239, 0.4)',
+    elevation: 4,
   },
   retryButtonTextLarge: {
     fontSize: 16,
@@ -887,7 +1236,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   doneButton: {
-    backgroundColor: colors.backgroundAlt,
+    backgroundColor: colors.backgroundCard,
     borderRadius: 16,
     padding: 16,
     alignItems: 'center',
