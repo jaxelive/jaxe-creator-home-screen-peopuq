@@ -436,45 +436,6 @@ export default function AcademyScreen() {
     if (item.content_type === 'video' && item.video) {
       console.log('[Academy] Opening video:', item.video.id);
       
-      // Mark video as watched immediately when opened
-      try {
-        const { error } = await supabase
-          .from('user_video_progress')
-          .upsert({
-            creator_handle: CREATOR_HANDLE,
-            video_id: item.video.id,
-            watched_seconds: 0,
-            completed: true,
-            completed_at: new Date().toISOString(),
-            last_watched_at: new Date().toISOString(),
-          }, {
-            onConflict: 'creator_handle,video_id',
-          });
-
-        if (!error) {
-          // Update local state
-          setVideoProgress(prev => {
-            const existing = prev.find(p => p.video_id === item.video!.id);
-            if (existing) {
-              return prev.map(p => 
-                p.video_id === item.video!.id 
-                  ? { ...p, completed: true, progress_percentage: 100 }
-                  : p
-              );
-            } else {
-              return [...prev, {
-                video_id: item.video!.id,
-                completed: true,
-                watched_seconds: 0,
-                progress_percentage: 100,
-              }];
-            }
-          });
-        }
-      } catch (error) {
-        console.error('[Academy] Error marking video as watched:', error);
-      }
-
       router.push({
         pathname: '/(tabs)/video-player',
         params: { 
@@ -486,6 +447,34 @@ export default function AcademyScreen() {
       });
     } else if (item.content_type === 'quiz' && item.quiz) {
       console.log('[Academy] Opening quiz:', item.quiz.id, item.quiz.title);
+      
+      // Check if all videos are watched before allowing quiz access
+      const allVideosWatched = course.contentItems
+        .filter(ci => ci.content_type === 'video')
+        .every(ci => {
+          const progress = videoProgress.find(p => p.video_id === ci.video!.id);
+          return progress?.completed || false;
+        });
+
+      if (!allVideosWatched) {
+        Alert.alert(
+          'Quiz Locked',
+          'You must watch all course videos before taking the quiz.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
+      // Check if quiz is already passed
+      const quizAttempt = quizAttempts.find(a => a.quiz_id === item.quiz!.id);
+      if (quizAttempt?.passed) {
+        Alert.alert(
+          'Quiz Completed',
+          'You have already passed this quiz. Retaking is not allowed.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
       
       try {
         // Navigate to quiz screen
@@ -809,6 +798,19 @@ export default function AcademyScreen() {
                             : undefined;
                           const videoNumber = item.content_type === 'video' ? getVideoNumber(course, item) : 0;
 
+                          // Check if quiz is locked
+                          const isQuizLocked = item.content_type === 'quiz' && !course.contentItems
+                            .filter(ci => ci.content_type === 'video')
+                            .every(ci => {
+                              const p = videoProgress.find(vp => vp.video_id === ci.video!.id);
+                              return p?.completed || false;
+                            });
+
+                          // Get quiz attempt for this quiz
+                          const quizAttempt = item.content_type === 'quiz' && item.quiz
+                            ? quizAttempts.find(a => a.quiz_id === item.quiz!.id)
+                            : undefined;
+
                           return (
                             <TouchableOpacity
                               key={item.id}
@@ -816,9 +818,11 @@ export default function AcademyScreen() {
                                 styles.contentCard,
                                 isCompleted && styles.contentCardCompleted,
                                 item.content_type === 'quiz' && styles.quizCard,
+                                isQuizLocked && styles.contentCardLocked,
                               ]}
                               onPress={() => handleItemPress(course, item, index)}
                               activeOpacity={0.7}
+                              disabled={isQuizLocked && item.content_type === 'quiz'}
                             >
                               {/* Video Thumbnail or Circle indicator */}
                               {item.content_type === 'video' && item.video ? (
@@ -914,6 +918,14 @@ export default function AcademyScreen() {
                                       <Text style={styles.requiredBadgeText}>REQUIRED</Text>
                                     </View>
                                   )}
+                                  {isQuizLocked && item.content_type === 'quiz' && (
+                                    <IconSymbol
+                                      ios_icon_name="lock.fill"
+                                      android_material_icon_name="lock"
+                                      size={20}
+                                      color="#A0A0A0"
+                                    />
+                                  )}
                                 </View>
                                 
                                 {item.content_type === 'video' && item.video?.description && (
@@ -940,10 +952,33 @@ export default function AcademyScreen() {
                                   </Text>
                                 )}
                                 
-                                {item.content_type === 'quiz' && (
-                                  <Text style={styles.videoDuration}>
-                                    70% to pass
+                                {item.content_type === 'quiz' && isQuizLocked && (
+                                  <Text style={styles.quizLockedText}>
+                                    Complete all videos to unlock
                                   </Text>
+                                )}
+                                
+                                {item.content_type === 'quiz' && !isQuizLocked && !quizAttempt && (
+                                  <Text style={styles.videoDuration}>
+                                    {item.quiz?.required_correct_answers || 0} correct answers required
+                                  </Text>
+                                )}
+                                
+                                {item.content_type === 'quiz' && quizAttempt && (
+                                  <View style={styles.quizResultContainer}>
+                                    <Text style={[
+                                      styles.quizResultText,
+                                      quizAttempt.passed ? styles.quizResultPassed : styles.quizResultFailed
+                                    ]}>
+                                      {quizAttempt.passed ? '✓ PASSED' : '✗ FAILED'} - {quizAttempt.score}%
+                                    </Text>
+                                    {!quizAttempt.passed && (
+                                      <Text style={styles.quizRetryText}>Tap to retry</Text>
+                                    )}
+                                    {quizAttempt.passed && (
+                                      <Text style={styles.quizLockedText}>Retake not allowed</Text>
+                                    )}
+                                  </View>
                                 )}
                               </View>
 
@@ -1264,6 +1299,35 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: colors.primary,
     borderStyle: 'dashed',
+  },
+  contentCardLocked: {
+    opacity: 0.6,
+    backgroundColor: colors.grey,
+  },
+  quizLockedText: {
+    fontSize: 12,
+    fontFamily: 'Poppins_500Medium',
+    color: '#A0A0A0',
+    marginTop: 4,
+  },
+  quizResultContainer: {
+    marginTop: 8,
+  },
+  quizResultText: {
+    fontSize: 14,
+    fontFamily: 'Poppins_700Bold',
+    marginBottom: 4,
+  },
+  quizResultPassed: {
+    color: '#10B981',
+  },
+  quizResultFailed: {
+    color: '#EF4444',
+  },
+  quizRetryText: {
+    fontSize: 12,
+    fontFamily: 'Poppins_500Medium',
+    color: colors.primary,
   },
   videoThumbnailContainer: {
     width: 120,

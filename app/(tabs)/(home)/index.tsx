@@ -411,14 +411,14 @@ export default function HomeScreen() {
         console.error('[HomeScreen] Error fetching course videos:', videosError);
       }
 
-      const totalVideos = videosData?.length || 5;
+      const totalVideos = videosData?.length || 6;
       setTotalCourseVideos(totalVideos);
 
-      // Fetch completed videos
+      // Fetch completed videos using creator_handle
       const { data: educationData, error: educationError } = await supabase
         .from('user_video_progress')
         .select('*')
-        .eq('user_id', creator.id)
+        .eq('creator_handle', CREATOR_HANDLE)
         .eq('completed', true);
 
       if (educationError && educationError.code !== 'PGRST116') {
@@ -1014,13 +1014,27 @@ export default function HomeScreen() {
                         />
 
                         <View style={styles.quizStatus}>
-                          <IconSymbol 
-                            ios_icon_name="lock.fill" 
-                            android_material_icon_name="lock" 
-                            size={14} 
-                            color="#A0A0A0" 
-                          />
-                          <Text style={styles.quizStatusText}>Quiz: Not started</Text>
+                          {educationProgress < totalCourseVideos ? (
+                            <>
+                              <IconSymbol 
+                                ios_icon_name="lock.fill" 
+                                android_material_icon_name="lock" 
+                                size={14} 
+                                color="#A0A0A0" 
+                              />
+                              <Text style={styles.quizStatusText}>Quiz: Locked</Text>
+                            </>
+                          ) : (
+                            <>
+                              <IconSymbol 
+                                ios_icon_name="checkmark.circle.fill" 
+                                android_material_icon_name="check-circle" 
+                                size={14} 
+                                color="#10B981" 
+                              />
+                              <Text style={styles.quizStatusText}>Quiz: Unlocked</Text>
+                            </>
+                          )}
                         </View>
 
                         <TouchableOpacity>

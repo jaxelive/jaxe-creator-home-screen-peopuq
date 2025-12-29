@@ -62,6 +62,29 @@ export default function VideoPlayerScreen() {
       if (videoError) throw videoError;
       setVideoData(video);
 
+      // Mark video as watched immediately when opened
+      console.log('[VideoPlayer] Marking video as watched:', videoId);
+      const { error: markError } = await supabase
+        .from('user_video_progress')
+        .upsert({
+          creator_handle: CREATOR_HANDLE,
+          video_id: videoId,
+          watched_seconds: 0,
+          completed: true,
+          completed_at: new Date().toISOString(),
+          last_watched_at: new Date().toISOString(),
+        }, {
+          onConflict: 'creator_handle,video_id',
+        });
+
+      if (markError) {
+        console.error('[VideoPlayer] Error marking video as watched:', markError);
+      } else {
+        console.log('[VideoPlayer] Video marked as watched successfully');
+        setIsCompleted(true);
+        setProgressPercentage(100);
+      }
+
       // Fetch existing progress using creator_handle
       const { data: progress, error: progressError } = await supabase
         .from('user_video_progress')
