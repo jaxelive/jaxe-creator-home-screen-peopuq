@@ -65,6 +65,7 @@ export default function ChallengeListScreen() {
   const [progress, setProgress] = useState<DayProgress[]>([]);
   const [userChallenge, setUserChallenge] = useState<UserChallenge | null>(null);
   const [loading, setLoading] = useState(true);
+  const [startingChallenge, setStartingChallenge] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
 
   // Update current time every second for live countdowns
@@ -255,7 +256,13 @@ export default function ChallengeListScreen() {
       return;
     }
 
+    if (startingChallenge) {
+      console.log('[Challenge] Already starting challenge, ignoring duplicate click');
+      return;
+    }
+
     try {
+      setStartingChallenge(true);
       console.log('[Challenge] Starting challenge for creator:', CREATOR_HANDLE);
       console.log('[Challenge] Challenge ID:', challenge.id);
       
@@ -298,7 +305,7 @@ export default function ChallengeListScreen() {
         if (challengeError) {
           console.error('[Challenge] Error creating user challenge:', challengeError);
           console.error('[Challenge] Error details:', JSON.stringify(challengeError, null, 2));
-          throw challengeError;
+          throw new Error(`Failed to create challenge progress: ${challengeError.message}`);
         }
 
         console.log('[Challenge] User challenge created:', challengeInsertData);
@@ -336,7 +343,7 @@ export default function ChallengeListScreen() {
         if (progressError) {
           console.error('[Challenge] Error creating day 1 progress:', progressError);
           console.error('[Challenge] Error details:', JSON.stringify(progressError, null, 2));
-          throw progressError;
+          throw new Error(`Failed to create day 1 progress: ${progressError.message}`);
         }
 
         console.log('[Challenge] Day 1 progress created:', progressInsertData);
@@ -352,7 +359,9 @@ export default function ChallengeListScreen() {
     } catch (error: any) {
       console.error('[Challenge] Error starting challenge:', error);
       console.error('[Challenge] Error stack:', error.stack);
-      Alert.alert('Error', error.message || 'Failed to start challenge');
+      Alert.alert('Error', error.message || 'Failed to start challenge. Please try again.');
+    } finally {
+      setStartingChallenge(false);
     }
   };
 
@@ -601,14 +610,28 @@ export default function ChallengeListScreen() {
 
         {/* Start Challenge Button */}
         {!hasStarted && (
-          <TouchableOpacity style={styles.startChallengeButton} onPress={handleStartChallenge}>
-            <Text style={styles.startChallengeButtonText}>Start Challenge</Text>
-            <IconSymbol
-              ios_icon_name="arrow.right"
-              android_material_icon_name="arrow-forward"
-              size={20}
-              color="#FFFFFF"
-            />
+          <TouchableOpacity 
+            style={[styles.startChallengeButton, startingChallenge && styles.startChallengeButtonDisabled]} 
+            onPress={handleStartChallenge}
+            disabled={startingChallenge}
+            activeOpacity={0.7}
+          >
+            {startingChallenge ? (
+              <>
+                <ActivityIndicator size="small" color="#FFFFFF" />
+                <Text style={styles.startChallengeButtonText}>Starting...</Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.startChallengeButtonText}>Start Challenge</Text>
+                <IconSymbol
+                  ios_icon_name="arrow.right"
+                  android_material_icon_name="arrow-forward"
+                  size={20}
+                  color="#FFFFFF"
+                />
+              </>
+            )}
           </TouchableOpacity>
         )}
 
@@ -889,6 +912,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     marginBottom: 24,
+  },
+  startChallengeButtonDisabled: {
+    opacity: 0.6,
   },
   startChallengeButtonText: {
     fontSize: 18,
