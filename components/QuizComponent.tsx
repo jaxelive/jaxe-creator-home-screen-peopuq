@@ -399,8 +399,11 @@ export default function QuizComponent({ quizId, creatorHandle, onComplete, onClo
         console.log('[QuizComponent] Quiz attempt saved successfully');
       }
 
+      // CRITICAL FIX: Reset the analyzing ref BEFORE setting state
+      console.log('[QuizComponent] Resetting analyzing refs and showing results');
+      isAnalyzingRef.current = false;
+      
       // Set analyzing to false and show results
-      console.log('[QuizComponent] Setting analyzing to false and showing results');
       setAnalyzing(false);
       setShowResults(true);
       onComplete(passed, scorePercentage);
@@ -500,72 +503,8 @@ export default function QuizComponent({ quizId, creatorHandle, onComplete, onClo
     );
   }
 
-  // CRITICAL: Check analyzing state BEFORE results
-  // This ensures we never show the question view after the last answer is selected
-  if (isAnalyzingRef.current || analyzing) {
-    return (
-      <View style={styles.container}>
-        <Animated.View 
-          entering={FadeIn.duration(300)}
-          style={styles.centerContent}
-        >
-          <Animated.View
-            entering={ZoomIn.springify().damping(15)}
-            style={styles.analyzingIconContainer}
-          >
-            <ActivityIndicator size="large" color={colors.primary} />
-          </Animated.View>
-          
-          <Animated.Text 
-            entering={FadeIn.delay(200).duration(400)}
-            style={styles.analyzingTitle}
-          >
-            Analyzing your answers...
-          </Animated.Text>
-          
-          <Animated.Text 
-            entering={FadeIn.delay(400).duration(400)}
-            style={styles.analyzingSubtitle}
-          >
-            Calculating your score
-          </Animated.Text>
-
-          <Animated.View 
-            entering={FadeIn.delay(600).duration(400)}
-            style={styles.analyzingProgressContainer}
-          >
-            <View style={styles.analyzingProgressBar}>
-              <Animated.View 
-                style={[styles.analyzingProgressFill, analyzingProgressStyle]} 
-              />
-            </View>
-            <View style={styles.analyzingSteps}>
-              <Animated.Text 
-                entering={FadeIn.delay(800).duration(300)}
-                style={styles.analyzingStep}
-              >
-                ✓ Checking accuracy
-              </Animated.Text>
-              <Animated.Text 
-                entering={FadeIn.delay(1200).duration(300)}
-                style={styles.analyzingStep}
-              >
-                ✓ Applying pass threshold
-              </Animated.Text>
-              <Animated.Text 
-                entering={FadeIn.delay(1600).duration(300)}
-                style={styles.analyzingStep}
-              >
-                ✓ Preparing results
-              </Animated.Text>
-            </View>
-          </Animated.View>
-        </Animated.View>
-      </View>
-    );
-  }
-
-  // Check results state
+  // CRITICAL: Check results state FIRST (before analyzing)
+  // This ensures we show results once they're ready
   if (showResults) {
     const passed = correctCount >= (quizData.required_correct_answers || 0);
 
@@ -672,6 +611,71 @@ export default function QuizComponent({ quizId, creatorHandle, onComplete, onClo
           </Animated.View>
         </Animated.View>
       </ScrollView>
+    );
+  }
+
+  // Check analyzing state AFTER results
+  // This ensures we never show the question view after the last answer is selected
+  if (isAnalyzingRef.current || analyzing) {
+    return (
+      <View style={styles.container}>
+        <Animated.View 
+          entering={FadeIn.duration(300)}
+          style={styles.centerContent}
+        >
+          <Animated.View
+            entering={ZoomIn.springify().damping(15)}
+            style={styles.analyzingIconContainer}
+          >
+            <ActivityIndicator size="large" color={colors.primary} />
+          </Animated.View>
+          
+          <Animated.Text 
+            entering={FadeIn.delay(200).duration(400)}
+            style={styles.analyzingTitle}
+          >
+            Analyzing your answers...
+          </Animated.Text>
+          
+          <Animated.Text 
+            entering={FadeIn.delay(400).duration(400)}
+            style={styles.analyzingSubtitle}
+          >
+            Calculating your score
+          </Animated.Text>
+
+          <Animated.View 
+            entering={FadeIn.delay(600).duration(400)}
+            style={styles.analyzingProgressContainer}
+          >
+            <View style={styles.analyzingProgressBar}>
+              <Animated.View 
+                style={[styles.analyzingProgressFill, analyzingProgressStyle]} 
+              />
+            </View>
+            <View style={styles.analyzingSteps}>
+              <Animated.Text 
+                entering={FadeIn.delay(800).duration(300)}
+                style={styles.analyzingStep}
+              >
+                ✓ Checking accuracy
+              </Animated.Text>
+              <Animated.Text 
+                entering={FadeIn.delay(1200).duration(300)}
+                style={styles.analyzingStep}
+              >
+                ✓ Applying pass threshold
+              </Animated.Text>
+              <Animated.Text 
+                entering={FadeIn.delay(1600).duration(300)}
+                style={styles.analyzingStep}
+              >
+                ✓ Preparing results
+              </Animated.Text>
+            </View>
+          </Animated.View>
+        </Animated.View>
+      </View>
     );
   }
 
