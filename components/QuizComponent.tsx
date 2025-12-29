@@ -102,13 +102,12 @@ export default function QuizComponent({ quizId, creatorHandle, onComplete, onClo
       setLoading(true);
       setError(null);
 
-      // Fetch quiz from incubation_content table
-      console.log('[QuizComponent] Fetching quiz from incubation_content...');
-      const { data: content, error: contentError } = await supabase
+      // Fetch all content from incubation_content table
+      console.log('[QuizComponent] Fetching all quiz questions from incubation_content...');
+      const { data: contentData, error: contentError } = await supabase
         .from('incubation_content')
         .select('*')
-        .eq('id', quizId)
-        .single();
+        .order('stage_order', { ascending: true });
 
       if (contentError) {
         console.error('[QuizComponent] Error fetching academy quiz:', contentError);
@@ -116,41 +115,46 @@ export default function QuizComponent({ quizId, creatorHandle, onComplete, onClo
         throw contentError;
       }
 
-      if (!content) {
-        console.error('[QuizComponent] Academy quiz not found for id:', quizId);
+      if (!contentData || contentData.length === 0) {
+        console.error('[QuizComponent] No content found in incubation_content');
         setError('Quiz not found');
         setLoading(false);
         return;
       }
 
-      console.log('[QuizComponent] Academy quiz fetched successfully:', {
-        id: content.id,
-        title: content.title,
-        quiz_questions: content.quiz_questions,
+      console.log('[QuizComponent] Content items fetched:', contentData.length);
+
+      // Collect all quiz questions from all content items
+      let allQuizQuestions: AcademyQuizQuestion[] = [];
+      
+      contentData.forEach((item: any) => {
+        if (item.quiz_questions && Array.isArray(item.quiz_questions) && item.quiz_questions.length > 0) {
+          console.log(`[QuizComponent] Adding ${item.quiz_questions.length} questions from "${item.title}"`);
+          allQuizQuestions = allQuizQuestions.concat(item.quiz_questions);
+        }
       });
 
-      if (!content.quiz_questions || !Array.isArray(content.quiz_questions) || content.quiz_questions.length === 0) {
+      if (allQuizQuestions.length === 0) {
         console.error('[QuizComponent] No quiz questions found in content');
         setError('No questions found for this quiz');
         setLoading(false);
         return;
       }
 
-      const questions: AcademyQuizQuestion[] = content.quiz_questions;
-      const totalQuestions = questions.length;
+      const totalQuestions = allQuizQuestions.length;
       // Require 70% correct answers to pass
       const requiredCorrect = Math.ceil(totalQuestions * 0.7);
 
       const academyData: AcademyQuizData = {
-        id: content.id,
-        title: content.title,
-        description: content.description,
+        id: quizId,
+        title: 'Final Quiz - JAXE Creator Training',
+        description: 'Test your knowledge from all the training videos',
         required_correct_answers: requiredCorrect,
         total_questions: totalQuestions,
-        questions: questions,
+        questions: allQuizQuestions,
       };
 
-      console.log('[QuizComponent] Setting academy quiz data with', questions.length, 'questions, required correct:', requiredCorrect);
+      console.log('[QuizComponent] Setting academy quiz data with', allQuizQuestions.length, 'questions, required correct:', requiredCorrect);
       setAcademyQuizData(academyData);
       console.log('[QuizComponent] Academy quiz data set successfully!');
     } catch (error: any) {

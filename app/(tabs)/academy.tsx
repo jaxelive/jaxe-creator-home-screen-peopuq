@@ -38,7 +38,7 @@ interface CourseQuiz {
   is_required: boolean;
 }
 
-interface AcademyContent {
+interface AcademyContentItem {
   id: string;
   title: string;
   description: string | null;
@@ -46,7 +46,6 @@ interface AcademyContent {
   thumbnail_url: string | null;
   stage_order: number;
   quiz_questions: any[] | null;
-  content_type: 'video' | 'quiz';
 }
 
 interface ContentItem {
@@ -108,7 +107,9 @@ export default function AcademyScreen() {
   });
 
   const [courses, setCourses] = useState<Course[]>([]);
-  const [academyContent, setAcademyContent] = useState<AcademyContent[]>([]);
+  const [academyVideos, setAcademyVideos] = useState<AcademyContentItem[]>([]);
+  const [academyQuizId, setAcademyQuizId] = useState<string | null>(null);
+  const [totalQuizQuestions, setTotalQuizQuestions] = useState<number>(0);
   const [expandedCourseId, setExpandedCourseId] = useState<string | null>(null);
   const [expandedAcademySection, setExpandedAcademySection] = useState<boolean>(true);
   const [videoProgress, setVideoProgress] = useState<VideoProgress[]>([]);
@@ -183,24 +184,40 @@ export default function AcademyScreen() {
       } else {
         console.log('[Academy] Creator journey content fetched:', academyData?.length || 0);
         
-        // Transform academy data to include content type
-        const transformedAcademyData: AcademyContent[] = (academyData || []).map((item: any) => {
-          const hasQuiz = item.quiz_questions && Array.isArray(item.quiz_questions) && item.quiz_questions.length > 0;
-          console.log(`[Academy] Item "${item.title}" - Has video: ${!!item.video_url}, Has quiz: ${hasQuiz}, Quiz questions:`, item.quiz_questions);
+        // Separate videos and collect all quiz questions
+        const videos: AcademyContentItem[] = [];
+        let allQuizQuestions: any[] = [];
+        
+        (academyData || []).forEach((item: any) => {
+          // Add video if it exists
+          if (item.video_url) {
+            videos.push({
+              id: item.id,
+              title: item.title,
+              description: item.description,
+              video_url: item.video_url,
+              thumbnail_url: item.thumbnail_url,
+              stage_order: item.stage_order,
+              quiz_questions: item.quiz_questions,
+            });
+          }
           
-          return {
-            id: item.id,
-            title: item.title,
-            description: item.description,
-            video_url: item.video_url,
-            thumbnail_url: item.thumbnail_url,
-            stage_order: item.stage_order,
-            quiz_questions: item.quiz_questions,
-            content_type: hasQuiz ? 'quiz' : 'video',
-          };
+          // Collect quiz questions
+          if (item.quiz_questions && Array.isArray(item.quiz_questions) && item.quiz_questions.length > 0) {
+            allQuizQuestions = allQuizQuestions.concat(item.quiz_questions);
+          }
         });
         
-        setAcademyContent(transformedAcademyData);
+        console.log('[Academy] Videos found:', videos.length);
+        console.log('[Academy] Total quiz questions collected:', allQuizQuestions.length);
+        
+        setAcademyVideos(videos);
+        setTotalQuizQuestions(allQuizQuestions.length);
+        
+        // Use a special ID for the combined quiz
+        if (allQuizQuestions.length > 0) {
+          setAcademyQuizId('creator-journey-final-quiz');
+        }
       }
 
       // Fetch all courses
@@ -437,12 +454,15 @@ export default function AcademyScreen() {
     return false;
   };
 
-  const isAcademyItemCompleted = (item: AcademyContent): boolean => {
-    if (item.content_type === 'quiz') {
-      const attempt = quizAttempts.find((a) => a.quiz_id === item.id);
-      return attempt?.passed || false;
-    }
-    return false;
+  const isAcademyVideoCompleted = (videoId: string): boolean => {
+    const progress = videoProgress.find((p) => p.video_id === videoId);
+    return progress?.completed || false;
+  };
+
+  const isAcademyQuizCompleted = (): boolean => {
+    if (!academyQuizId) return false;
+    const attempt = quizAttempts.find((a) => a.quiz_id === academyQuizId);
+    return attempt?.passed || false;
   };
 
   const getVideoProgress = (videoId: string): VideoProgress | undefined => {
@@ -521,37 +541,39 @@ export default function AcademyScreen() {
     }
   };
 
-  const handleAcademyItemPress = async (item: AcademyContent) => {
-    if (item.content_type === 'quiz' && item.quiz_questions && item.quiz_questions.length > 0) {
-      console.log('[Academy] Opening creator journey quiz:', item.id, item.title);
-      
-      try {
-        // Navigate to quiz screen with academy quiz ID
-        router.push({
-          pathname: '/(tabs)/quiz',
-          params: { 
-            quizId: item.id,
-            quizTitle: item.title,
-            isAcademyQuiz: 'true',
-          },
-        });
-        console.log('[Academy] Creator journey quiz navigation initiated');
-      } catch (error) {
-        console.error('[Academy] Error navigating to creator journey quiz:', error);
-        Alert.alert('Error', 'Failed to open quiz. Please try again.');
-      }
-    } else if (item.video_url) {
-      console.log('[Academy] Opening creator journey video:', item.id);
-      
+  const handleAcademyVideoPress = async (video: AcademyContentItem) => {
+    console.log('[Academy] Opening creator journey video:', video.id);
+    
+    router.push({
+      pathname: '/(tabs)/video-player',
+      params: { 
+        videoId: video.id,
+        videoUrl: video.video_url!,
+        title: video.title,
+        description: video.description || '',
+      },
+    });
+  };
+
+  const handleAcademyQuizPress = () => {
+    if (!academyQuizId) return;
+    
+    console.log('[Academy] Opening creator journey final quiz');
+    
+    try {
+      // Navigate to quiz screen with the special quiz ID
       router.push({
-        pathname: '/(tabs)/video-player',
+        pathname: '/(tabs)/quiz',
         params: { 
-          videoId: item.id,
-          videoUrl: item.video_url,
-          title: item.title,
-          description: item.description || '',
+          quizId: academyQuizId,
+          quizTitle: 'Final Quiz - JAXE Creator Training',
+          isAcademyQuiz: 'true',
         },
       });
+      console.log('[Academy] Creator journey quiz navigation initiated');
+    } catch (error) {
+      console.error('[Academy] Error navigating to creator journey quiz:', error);
+      Alert.alert('Error', 'Failed to open quiz. Please try again.');
     }
   };
 
@@ -562,9 +584,11 @@ export default function AcademyScreen() {
   };
 
   const getAcademyProgress = () => {
-    const completedItems = academyContent.filter(item => isAcademyItemCompleted(item)).length;
-    const totalItems = academyContent.filter(item => item.content_type === 'quiz').length;
-    return { completed: completedItems, total: totalItems };
+    const completedVideos = academyVideos.filter(video => isAcademyVideoCompleted(video.id)).length;
+    const quizCompleted = isAcademyQuizCompleted() ? 1 : 0;
+    const totalItems = academyVideos.length + (academyQuizId ? 1 : 0);
+    const completed = completedVideos + quizCompleted;
+    return { completed, total: totalItems };
   };
 
   const getVideoNumber = (course: Course, item: ContentItem): number => {
@@ -752,11 +776,11 @@ export default function AcademyScreen() {
         </View>
 
         {/* Creator Journey Section (from incubation_content) */}
-        {academyContent.length > 0 && (
+        {(academyVideos.length > 0 || academyQuizId) && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Creator Journey</Text>
             <Text style={styles.sectionSubtitle}>
-              Complete each stage with videos and quizzes to become a certified JAXE creator
+              Watch all videos and complete the final quiz to become a certified JAXE creator
             </Text>
             <View style={styles.courseContainer}>
               <TouchableOpacity
@@ -776,7 +800,7 @@ export default function AcademyScreen() {
                 <View style={styles.courseHeaderText}>
                   <Text style={styles.courseTitle}>JAXE Creator Training</Text>
                   <Text style={styles.courseProgress}>
-                    {getAcademyProgress().completed} / {getAcademyProgress().total} quizzes completed
+                    {getAcademyProgress().completed} / {getAcademyProgress().total} items completed
                   </Text>
                 </View>
                 
@@ -799,62 +823,90 @@ export default function AcademyScreen() {
 
               {expandedAcademySection && (
                 <View style={styles.courseContent}>
-                  {academyContent.map((item, index) => {
-                    const isCompleted = isAcademyItemCompleted(item);
-                    const isQuiz = item.content_type === 'quiz';
+                  {/* Display all videos */}
+                  {academyVideos.map((video, index) => {
+                    const isCompleted = isAcademyVideoCompleted(video.id);
 
                     return (
                       <TouchableOpacity
-                        key={item.id}
+                        key={video.id}
                         style={[
                           styles.contentCard,
                           isCompleted && styles.contentCardCompleted,
                         ]}
-                        onPress={() => handleAcademyItemPress(item)}
+                        onPress={() => handleAcademyVideoPress(video)}
                         activeOpacity={0.7}
                       >
-                        <View style={styles.contentIndicatorContainer}>
-                          <View style={[
-                            styles.contentIndicatorCircle,
-                            isCompleted && styles.contentIndicatorCircleCompleted,
-                          ]}>
-                            {isCompleted ? (
-                              <IconSymbol
-                                ios_icon_name="checkmark"
-                                android_material_icon_name="check"
-                                size={20}
-                                color="#FFFFFF"
+                        <View style={styles.videoThumbnailContainer}>
+                          {video.thumbnail_url ? (
+                            <>
+                              <Image
+                                source={{ uri: video.thumbnail_url }}
+                                style={styles.videoThumbnail}
+                                resizeMode="cover"
                               />
-                            ) : (
-                              <Text style={styles.contentIndicatorQuizText}>
-                                {isQuiz ? 'Quiz' : index + 1}
-                              </Text>
-                            )}
+                              {/* Play icon overlay */}
+                              <View style={styles.playIconOverlay}>
+                                <View style={styles.playIconCircle}>
+                                  <IconSymbol
+                                    ios_icon_name="play.fill"
+                                    android_material_icon_name="play-arrow"
+                                    size={24}
+                                    color="#FFFFFF"
+                                  />
+                                </View>
+                              </View>
+                              {/* Completion badge */}
+                              {isCompleted && (
+                                <View style={styles.completionBadge}>
+                                  <IconSymbol
+                                    ios_icon_name="checkmark.circle.fill"
+                                    android_material_icon_name="check-circle"
+                                    size={24}
+                                    color={colors.primary}
+                                  />
+                                </View>
+                              )}
+                            </>
+                          ) : (
+                            <View style={styles.videoThumbnailPlaceholder}>
+                              <View style={styles.playIconCircle}>
+                                <IconSymbol
+                                  ios_icon_name="play.fill"
+                                  android_material_icon_name="play-arrow"
+                                  size={24}
+                                  color="#FFFFFF"
+                                />
+                              </View>
+                              {isCompleted && (
+                                <View style={styles.completionBadge}>
+                                  <IconSymbol
+                                    ios_icon_name="checkmark.circle.fill"
+                                    android_material_icon_name="check-circle"
+                                    size={24}
+                                    color={colors.primary}
+                                  />
+                                </View>
+                              )}
+                            </View>
+                          )}
+                          {/* Video number badge */}
+                          <View style={styles.videoNumberBadge}>
+                            <Text style={styles.videoNumberText}>{index + 1}</Text>
                           </View>
                         </View>
 
                         <View style={styles.contentInfo}>
                           <View style={styles.contentHeader}>
-                            <Text style={styles.contentTitle}>{item.title}</Text>
-                            {isQuiz && (
-                              <View style={styles.requiredBadge}>
-                                <Text style={styles.requiredBadgeText}>QUIZ</Text>
-                              </View>
-                            )}
+                            <Text style={styles.contentTitle}>{video.title}</Text>
                           </View>
                           
-                          {item.description && (
+                          {video.description && (
                             <Text
                               style={styles.contentDescription}
                               numberOfLines={2}
                             >
-                              {item.description}
-                            </Text>
-                          )}
-                          
-                          {isQuiz && item.quiz_questions && (
-                            <Text style={styles.videoDuration}>
-                              {item.quiz_questions.length} questions • 70% to pass
+                              {video.description}
                             </Text>
                           )}
                         </View>
@@ -870,6 +922,68 @@ export default function AcademyScreen() {
                       </TouchableOpacity>
                     );
                   })}
+
+                  {/* Display final quiz at the end */}
+                  {academyQuizId && (
+                    <TouchableOpacity
+                      style={[
+                        styles.contentCard,
+                        styles.quizCard,
+                        isAcademyQuizCompleted() && styles.contentCardCompleted,
+                      ]}
+                      onPress={handleAcademyQuizPress}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.contentIndicatorContainer}>
+                        <View style={[
+                          styles.contentIndicatorCircle,
+                          isAcademyQuizCompleted() && styles.contentIndicatorCircleCompleted,
+                        ]}>
+                          {isAcademyQuizCompleted() ? (
+                            <IconSymbol
+                              ios_icon_name="checkmark"
+                              android_material_icon_name="check"
+                              size={20}
+                              color="#FFFFFF"
+                            />
+                          ) : (
+                            <Text style={styles.contentIndicatorQuizText}>
+                              Quiz
+                            </Text>
+                          )}
+                        </View>
+                      </View>
+
+                      <View style={styles.contentInfo}>
+                        <View style={styles.contentHeader}>
+                          <Text style={styles.contentTitle}>Final Quiz</Text>
+                          <View style={styles.requiredBadge}>
+                            <Text style={styles.requiredBadgeText}>REQUIRED</Text>
+                          </View>
+                        </View>
+                        
+                        <Text
+                          style={styles.contentDescription}
+                          numberOfLines={2}
+                        >
+                          Test your knowledge from all the videos
+                        </Text>
+                        
+                        <Text style={styles.videoDuration}>
+                          {totalQuizQuestions} questions • 70% to pass
+                        </Text>
+                      </View>
+
+                      <View style={styles.contentArrow}>
+                        <IconSymbol
+                          ios_icon_name="chevron.right"
+                          android_material_icon_name="chevron-right"
+                          size={20}
+                          color="#A0A0A0"
+                        />
+                      </View>
+                    </TouchableOpacity>
+                  )}
                 </View>
               )}
             </View>
@@ -1111,7 +1225,7 @@ export default function AcademyScreen() {
             color={colors.primary}
           />
           <Text style={styles.infoText}>
-            Complete the Creator Journey quizzes to become a certified JAXE creator. Each quiz requires 70% to pass and can be retaken as many times as needed.
+            Complete all Creator Journey videos and pass the final quiz (70% required) to become a certified JAXE creator. The quiz can be retaken as many times as needed.
           </Text>
         </View>
       </ScrollView>
@@ -1396,6 +1510,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(102, 66, 239, 0.1)',
     borderWidth: 2,
     borderColor: colors.primary,
+  },
+  quizCard: {
+    borderWidth: 2,
+    borderColor: colors.primary,
+    borderStyle: 'dashed',
   },
   videoThumbnailContainer: {
     width: 120,
