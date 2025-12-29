@@ -257,6 +257,8 @@ export default function ChallengeListScreen() {
 
     try {
       console.log('[Challenge] Starting challenge for creator:', CREATOR_HANDLE);
+      console.log('[Challenge] Challenge ID:', challenge.id);
+      
       const now = new Date().toISOString();
       const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
@@ -267,8 +269,11 @@ export default function ChallengeListScreen() {
         throw new Error('Day 1 not found');
       }
 
+      console.log('[Challenge] Day 1 ID:', day1.id);
+
       // Create user challenge using creator_handle
-      const { error: challengeError } = await supabase
+      console.log('[Challenge] Creating user challenge record...');
+      const { data: challengeInsertData, error: challengeError } = await supabase
         .from('user_challenge_progress')
         .upsert({
           creator_handle: CREATOR_HANDLE,
@@ -277,17 +282,23 @@ export default function ChallengeListScreen() {
           started_at: now,
           current_day: 1,
           completed_days: 0,
+          user_id: null, // Set to null since we're using creator_handle
         }, {
           onConflict: 'creator_handle,challenge_id',
-        });
+        })
+        .select();
 
       if (challengeError) {
         console.error('[Challenge] Error creating user challenge:', challengeError);
+        console.error('[Challenge] Error details:', JSON.stringify(challengeError, null, 2));
         throw challengeError;
       }
 
+      console.log('[Challenge] User challenge created:', challengeInsertData);
+
       // Create day 1 progress using creator_handle (using day_id for unique constraint)
-      const { error: progressError } = await supabase
+      console.log('[Challenge] Creating day 1 progress record...');
+      const { data: progressInsertData, error: progressError } = await supabase
         .from('user_day_progress')
         .upsert({
           creator_handle: CREATOR_HANDLE,
@@ -299,21 +310,27 @@ export default function ChallengeListScreen() {
           expires_at: expiresAt,
           user_marked_complete: false,
           admin_validated: false,
+          user_id: null, // Set to null since we're using creator_handle
         }, {
           onConflict: 'creator_handle,day_id',
-        });
+        })
+        .select();
 
       if (progressError) {
         console.error('[Challenge] Error creating day 1 progress:', progressError);
+        console.error('[Challenge] Error details:', JSON.stringify(progressError, null, 2));
         throw progressError;
       }
 
+      console.log('[Challenge] Day 1 progress created:', progressInsertData);
       console.log('[Challenge] Challenge started successfully');
+      
       // Refresh data
       await fetchChallengeData();
       Alert.alert('Success', 'Challenge started! Day 1 is now active.');
     } catch (error: any) {
       console.error('[Challenge] Error starting challenge:', error);
+      console.error('[Challenge] Error stack:', error.stack);
       Alert.alert('Error', error.message || 'Failed to start challenge');
     }
   };
@@ -394,6 +411,7 @@ export default function ChallengeListScreen() {
                 expires_at: nextExpiresAt,
                 user_marked_complete: false,
                 admin_validated: false,
+                user_id: null,
               });
           }
         }
@@ -470,6 +488,7 @@ export default function ChallengeListScreen() {
                 expires_at: nextExpiresAt,
                 user_marked_complete: false,
                 admin_validated: false,
+                user_id: null,
               });
           }
         }
