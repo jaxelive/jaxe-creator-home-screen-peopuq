@@ -79,5 +79,3 @@ export function AnimatedNumber({
     </Text>
   );
 }
-
-export default AnimatedNumber;

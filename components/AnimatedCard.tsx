@@ -33,5 +33,3 @@ export function AnimatedCard({
     </Animated.View>
   );
 }
-
-export default AnimatedCard;

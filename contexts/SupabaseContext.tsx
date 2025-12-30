@@ -18,7 +18,7 @@ const SupabaseContext = createContext<SupabaseContextType | undefined>(undefined
 export const SupabaseProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(false); // Changed to false for testing
+  const [loading, setLoading] = useState(true);
 
   const signIn = async (email: string, password: string) => {
     try {
@@ -62,73 +62,35 @@ export const SupabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   useEffect(() => {
-    console.log('[SupabaseContext] TESTING MODE - Authentication disabled');
+    console.log('[SupabaseContext] Initializing authentication');
     
-    // For testing: Create a mock session/user
-    // This bypasses authentication entirely
-    const mockUser = {
-      id: 'test-user-id',
-      email: 'test@example.com',
-      app_metadata: {},
-      user_metadata: {},
-      aud: 'authenticated',
-      created_at: new Date().toISOString(),
-    } as User;
-
-    setUser(mockUser);
-    setLoading(false);
-
-    // Commented out for testing - this is the normal auth flow
-    /*
-    let mounted = true;
-
     // Check for existing session
-    const initializeAuth = async () => {
-      try {
-        const { data: { session: existingSession }, error } = await supabase.auth.getSession();
-        
-        if (error) {
-          console.error('[SupabaseContext] Error getting session:', error);
-          if (mounted) {
-            setLoading(false);
-          }
-          return;
-        }
-        
-        if (existingSession) {
-          console.log('[SupabaseContext] Existing session found:', existingSession.user.email);
-          if (mounted) {
-            setSession(existingSession);
-            setUser(existingSession.user);
-          }
-        } else {
-          console.log('[SupabaseContext] No existing session found');
-        }
-      } catch (err) {
-        console.error('[SupabaseContext] Error initializing auth:', err);
-      } finally {
-        if (mounted) {
-          setLoading(false);
-        }
+    supabase.auth.getSession().then(({ data: { session: existingSession }, error }) => {
+      if (error) {
+        console.error('[SupabaseContext] Error getting session:', error);
       }
-    };
-
-    initializeAuth();
+      
+      if (existingSession) {
+        console.log('[SupabaseContext] Existing session found:', existingSession.user.email);
+        setSession(existingSession);
+        setUser(existingSession.user);
+      } else {
+        console.log('[SupabaseContext] No existing session found');
+      }
+      
+      setLoading(false);
+    });
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
       console.log('[SupabaseContext] Auth state changed:', _event, newSession?.user?.email);
-      if (mounted) {
-        setSession(newSession);
-        setUser(newSession?.user ?? null);
-      }
+      setSession(newSession);
+      setUser(newSession?.user ?? null);
     });
 
     return () => {
-      mounted = false;
       subscription.unsubscribe();
     };
-    */
   }, []);
 
   return (

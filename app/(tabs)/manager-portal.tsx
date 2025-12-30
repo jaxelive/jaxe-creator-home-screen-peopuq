@@ -17,6 +17,9 @@ import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
 import { useFonts, Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold } from '@expo-google-fonts/poppins';
 import { supabase } from '@/app/integrations/supabase/client';
+import { useCreatorData } from '@/hooks/useCreatorData';
+
+const CREATOR_HANDLE = 'avelezsanti';
 
 interface ManagerData {
   id: string;
@@ -59,6 +62,7 @@ export default function ManagerPortalScreen() {
     Poppins_700Bold,
   });
 
+  const { creator, loading: creatorLoading } = useCreatorData(CREATOR_HANDLE);
   const [manager, setManager] = useState<ManagerData | null>(null);
   const [assignedCreators, setAssignedCreators] = useState<CreatorData[]>([]);
   const [stats, setStats] = useState<ManagerStats>({
@@ -70,25 +74,27 @@ export default function ManagerPortalScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isManager, setIsManager] = useState(false);
 
   const fetchManagerData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
-      console.log('[ManagerPortal] TESTING MODE - Skipping authentication checks');
+      console.log('[ManagerPortal] Fetching manager data for creator:', CREATOR_HANDLE);
 
-      // TESTING MODE: For testing, we'll use a hardcoded user ID
-      // In production, you would get this from the authenticated user
-      const testUserId = 'test-user-id';
-      
-      // For testing purposes, let's try to fetch a manager record
-      // You can change this to a real user_id from your database for testing
-      console.log('[ManagerPortal] Fetching manager record for test user');
-      
-      // Try to fetch any manager record for testing
-      const { data: managerRecords, error: managerListError } = await supabase
+      // Get the logged-in creator's manager ID
+      if (!creator?.assigned_manager_id) {
+        console.log('[ManagerPortal] No manager assigned to creator');
+        setError('You do not have a manager assigned yet.');
+        setLoading(false);
+        return;
+      }
+
+      const managerId = creator.assigned_manager_id;
+      console.log('[ManagerPortal] Manager ID:', managerId);
+
+      // Fetch manager details
+      const { data: managerData, error: managerError } = await supabase
         .from('managers')
         .select(`
           id,
@@ -102,114 +108,94 @@ export default function ManagerPortalScreen() {
             first_name,
             last_name,
             email,
-            avatar_url,
-            role
+            avatar_url
           )
         `)
-        .limit(1);
+        .eq('id', managerId)
+        .single();
 
-      if (managerListError) {
-        console.error('[ManagerPortal] Manager fetch error:', managerListError);
-        setError(`Database error: ${managerListError.message}. Please contact support.`);
+      if (managerError) {
+        console.error('[ManagerPortal] Manager fetch error:', managerError);
+        setError(managerError.message);
         setLoading(false);
         return;
       }
 
-      if (!managerRecords || managerRecords.length === 0) {
-        console.warn('[ManagerPortal] No manager records found in database');
-        setError('No manager profiles found in the system. This is a testing environment - please add a manager record to the database to test this feature.');
-        setLoading(false);
-        return;
-      }
+      if (managerData && managerData.users) {
+        const managerUser = managerData.users as any;
+        const managerInfo: ManagerData = {
+          id: managerData.id,
+          user_id: managerUser.id,
+          first_name: managerUser.first_name,
+          last_name: managerUser.last_name,
+          email: managerUser.email,
+          avatar_url: managerData.avatar_url || managerUser.avatar_url,
+          whatsapp: managerData.whatsapp,
+          tiktok_handle: managerData.tiktok_handle,
+          promoted_to_manager_at: managerData.promoted_to_manager_at,
+        };
 
-      // Use the first manager record for testing
-      const managerRecord = managerRecords[0];
-      const managerUser = managerRecord.users as any;
+        console.log('[ManagerPortal] Manager data loaded:', managerInfo);
+        setManager(managerInfo);
 
-      if (!managerUser) {
-        console.warn('[ManagerPortal] Manager user data not found');
-        setError('Manager user data not found. Please check database relationships.');
-        setLoading(false);
-        return;
-      }
+        // Fetch all creators assigned to this manager
+        const { data: creatorsData, error: creatorsError } = await supabase
+          .from('creators')
+          .select('id, first_name, last_name, creator_handle, email, region, graduation_status, total_diamonds, phone, avatar_url, profile_picture_url')
+          .eq('assigned_manager_id', managerId)
+          .eq('is_active', true)
+          .order('total_diamonds', { ascending: false });
 
-      const managerInfo: ManagerData = {
-        id: managerRecord.id,
-        user_id: managerUser.id,
-        first_name: managerUser.first_name,
-        last_name: managerUser.last_name,
-        email: managerUser.email,
-        avatar_url: managerRecord.avatar_url || managerUser.avatar_url,
-        whatsapp: managerRecord.whatsapp,
-        tiktok_handle: managerRecord.tiktok_handle,
-        promoted_to_manager_at: managerRecord.promoted_to_manager_at,
-      };
+        if (creatorsError) {
+          console.error('[ManagerPortal] Creators fetch error:', creatorsError);
+        } else {
+          console.log('[ManagerPortal] Assigned creators loaded:', creatorsData?.length || 0);
+          setAssignedCreators(creatorsData || []);
 
-      console.log('[ManagerPortal] Manager data loaded successfully:', {
-        id: managerInfo.id,
-        name: `${managerInfo.first_name} ${managerInfo.last_name}`,
-        email: managerInfo.email
-      });
-      setManager(managerInfo);
-      setIsManager(true);
+          // Calculate stats
+          const totalCreators = creatorsData?.length || 0;
+          const totalRookies = creatorsData?.filter(c => 
+            !c.graduation_status || 
+            c.graduation_status.toLowerCase().includes('rookie') ||
+            c.graduation_status.toLowerCase().includes('new')
+          ).length || 0;
+          const totalGraduated = creatorsData?.filter(c => 
+            c.graduation_status && 
+            (c.graduation_status.toLowerCase().includes('silver') || 
+             c.graduation_status.toLowerCase().includes('gold'))
+          ).length || 0;
+          const collectiveDiamonds = creatorsData?.reduce((sum, c) => sum + (c.total_diamonds || 0), 0) || 0;
 
-      // Fetch all creators assigned to this manager
-      console.log('[ManagerPortal] Fetching assigned creators for manager_id:', managerRecord.id);
-      const { data: creatorsData, error: creatorsError } = await supabase
-        .from('creators')
-        .select('id, first_name, last_name, creator_handle, email, region, graduation_status, total_diamonds, phone, avatar_url, profile_picture_url')
-        .eq('assigned_manager_id', managerRecord.id)
-        .eq('is_active', true)
-        .order('total_diamonds', { ascending: false });
+          setStats({
+            totalCreators,
+            totalRookies,
+            totalGraduated,
+            collectiveDiamonds,
+          });
 
-      if (creatorsError) {
-        console.error('[ManagerPortal] Creators fetch error:', creatorsError);
-        console.warn('[ManagerPortal] Could not fetch creators, continuing with empty list');
+          console.log('[ManagerPortal] Stats calculated:', {
+            totalCreators,
+            totalRookies,
+            totalGraduated,
+            collectiveDiamonds,
+          });
+        }
       } else {
-        console.log('[ManagerPortal] Assigned creators loaded:', creatorsData?.length || 0);
-        setAssignedCreators(creatorsData || []);
-
-        // Calculate stats
-        const totalCreators = creatorsData?.length || 0;
-        const totalRookies = creatorsData?.filter(c => 
-          !c.graduation_status || 
-          c.graduation_status.toLowerCase().includes('rookie') ||
-          c.graduation_status.toLowerCase().includes('new')
-        ).length || 0;
-        const totalGraduated = creatorsData?.filter(c => 
-          c.graduation_status && 
-          (c.graduation_status.toLowerCase().includes('silver') || 
-           c.graduation_status.toLowerCase().includes('gold'))
-        ).length || 0;
-        const collectiveDiamonds = creatorsData?.reduce((sum, c) => sum + (c.total_diamonds || 0), 0) || 0;
-
-        setStats({
-          totalCreators,
-          totalRookies,
-          totalGraduated,
-          collectiveDiamonds,
-        });
-
-        console.log('[ManagerPortal] Stats calculated:', {
-          totalCreators,
-          totalRookies,
-          totalGraduated,
-          collectiveDiamonds,
-        });
+        setError('Manager not found');
       }
-
-      console.log('[ManagerPortal] Data fetch completed successfully');
     } catch (err: any) {
       console.error('[ManagerPortal] Unexpected error:', err);
-      setError(`Unexpected error: ${err?.message || 'Unknown error occurred'}. Please try again or contact support.`);
+      setError(err?.message || 'Failed to fetch manager data');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [creator]);
 
   useEffect(() => {
-    fetchManagerData();
-  }, [fetchManagerData]);
+    if (creator && !creatorLoading) {
+      fetchManagerData();
+    }
+  }, [creator, creatorLoading]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -269,7 +255,7 @@ export default function ManagerPortalScreen() {
     return colors.primary;
   };
 
-  if (!fontsLoaded || loading) {
+  if (!fontsLoaded || loading || creatorLoading) {
     return (
       <>
         <Stack.Screen
@@ -288,7 +274,7 @@ export default function ManagerPortalScreen() {
     );
   }
 
-  if (error || !manager || !isManager) {
+  if (error || !manager) {
     return (
       <>
         <Stack.Screen
@@ -299,31 +285,18 @@ export default function ManagerPortalScreen() {
             headerTintColor: colors.text,
           }}
         />
-        <ScrollView style={styles.container} contentContainerStyle={styles.centerContent}>
+        <View style={[styles.container, styles.centerContent]}>
           <IconSymbol
             ios_icon_name="exclamationmark.triangle.fill"
             android_material_icon_name="warning"
             size={64}
             color={colors.error}
           />
-          <Text style={styles.errorTitle}>Manager Portal</Text>
-          <Text style={styles.errorText}>{error || 'Unable to access Manager Portal'}</Text>
-          <Text style={styles.testingNote}>
-            TESTING MODE: Authentication is disabled. The portal is attempting to load any available manager data from the database.
-          </Text>
-          <TouchableOpacity 
-            style={styles.retryButton} 
-            onPress={onRefresh}
-          >
-            <Text style={styles.retryButtonText}>Retry</Text>
+          <Text style={styles.errorText}>{error || 'Manager not found'}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={fetchManagerData}>
+            <Text style={styles.retryButtonText}>Try Again</Text>
           </TouchableOpacity>
-          <TouchableOpacity 
-            style={styles.backButton} 
-            onPress={() => router.back()}
-          >
-            <Text style={styles.backButtonText}>Go Back</Text>
-          </TouchableOpacity>
-        </ScrollView>
+        </View>
       </>
     );
   }
@@ -352,19 +325,6 @@ export default function ManagerPortalScreen() {
           />
         }
       >
-        {/* TESTING MODE BANNER */}
-        <View style={styles.testingBanner}>
-          <IconSymbol
-            ios_icon_name="info.circle.fill"
-            android_material_icon_name="info"
-            size={20}
-            color="#FFFFFF"
-          />
-          <Text style={styles.testingBannerText}>
-            TESTING MODE: Authentication disabled
-          </Text>
-        </View>
-
         {/* MANAGER HEADER SECTION */}
         <View style={styles.headerCard}>
           <View style={styles.headerTop}>
@@ -659,7 +619,6 @@ const styles = StyleSheet.create({
   centerContent: {
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 32,
   },
   loadingText: {
     marginTop: 16,
@@ -667,72 +626,29 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_500Medium',
     color: colors.textSecondary,
   },
-  errorTitle: {
-    fontSize: 24,
-    fontFamily: 'Poppins_700Bold',
-    color: colors.text,
-    textAlign: 'center',
-    marginTop: 16,
-    marginBottom: 12,
-  },
   errorText: {
-    fontSize: 15,
-    fontFamily: 'Poppins_400Regular',
-    color: colors.textSecondary,
+    fontSize: 16,
+    fontFamily: 'Poppins_500Medium',
+    color: colors.error,
     textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 16,
-  },
-  testingNote: {
-    fontSize: 13,
-    fontFamily: 'Poppins_400Regular',
-    color: colors.primary,
-    textAlign: 'center',
-    lineHeight: 20,
+    paddingHorizontal: 32,
+    marginTop: 16,
     marginBottom: 24,
-    paddingHorizontal: 20,
   },
   retryButton: {
     backgroundColor: colors.primary,
     paddingHorizontal: 32,
     paddingVertical: 14,
     borderRadius: 16,
-    marginBottom: 12,
   },
   retryButtonText: {
     fontSize: 16,
     fontFamily: 'Poppins_600SemiBold',
     color: '#FFFFFF',
   },
-  backButton: {
-    backgroundColor: colors.grey,
-    paddingHorizontal: 32,
-    paddingVertical: 14,
-    borderRadius: 16,
-  },
-  backButtonText: {
-    fontSize: 16,
-    fontFamily: 'Poppins_600SemiBold',
-    color: colors.text,
-  },
   content: {
     padding: 20,
     paddingBottom: 40,
-  },
-  testingBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.primary,
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 20,
-    gap: 8,
-  },
-  testingBannerText: {
-    fontSize: 14,
-    fontFamily: 'Poppins_600SemiBold',
-    color: '#FFFFFF',
   },
 
   // HEADER CARD
