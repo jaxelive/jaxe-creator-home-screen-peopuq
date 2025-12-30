@@ -236,9 +236,6 @@ export default function ProfileScreen() {
     );
   }
 
-  // Check if user is a manager
-  const isManager = creator.user_role === 'manager';
-
   return (
     <>
       <Stack.Screen
@@ -470,11 +467,6 @@ export default function ProfileScreen() {
                   <Text style={styles.creatorBadgeText}>{type}</Text>
                 </View>
               ))}
-              {isManager && (
-                <View style={styles.managerBadge}>
-                  <Text style={styles.managerBadgeText}>Manager</Text>
-                </View>
-              )}
             </View>
           </View>
           <View style={styles.divider} />
@@ -733,17 +725,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   creatorBadgeText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  managerBadge: {
-    backgroundColor: colors.success,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  managerBadgeText: {
     fontSize: 12,
     fontWeight: '600',
     color: '#fff',
