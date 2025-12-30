@@ -188,7 +188,8 @@ export default function HomeScreen() {
         hasManager: !!creator.manager,
         managerName: creator.manager ? `${creator.manager.first_name} ${creator.manager.last_name}` : 'None',
         creatorType: creator.creator_type,
-        userRole: creator.user_role
+        userRole: creator.user_role,
+        isManager: creator.is_manager
       });
       fetchBattleData();
       fetchChallengeData();
@@ -615,8 +616,8 @@ export default function HomeScreen() {
     ? creator.creator_type 
     : ['Creator'];
 
-  // Check if user is a manager
-  const isManager = creator.user_role === 'manager';
+  // Check if user is a manager - check both is_manager flag and user_role
+  const isManager = creator.is_manager === true || creator.user_role === 'manager';
 
   // Calculate tier and next tier from real data with region-based logic
   const currentDiamonds = creator.diamonds_monthly || 0;
@@ -716,12 +717,13 @@ export default function HomeScreen() {
                     <View style={styles.regionBadge}>
                       <Text style={styles.regionBadgeText}>{region}</Text>
                     </View>
-                    <View style={styles.regionBadge}>
-                      <Text style={styles.regionBadgeText}>Creator</Text>
-                    </View>
-                    {isManager && (
+                    {isManager ? (
                       <View style={styles.managerBadge}>
                         <Text style={styles.managerBadgeText}>Manager</Text>
+                      </View>
+                    ) : (
+                      <View style={styles.regionBadge}>
+                        <Text style={styles.regionBadgeText}>Creator</Text>
                       </View>
                     )}
                   </View>

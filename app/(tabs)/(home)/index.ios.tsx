@@ -118,8 +118,8 @@ export default function HomeScreen() {
   
   const region = creator.region || 'USA / Canada';
 
-  // Check if user is a manager
-  const isManager = creator.user_role === 'manager';
+  // Check if user is a manager - check both is_manager flag and user_role
+  const isManager = creator.is_manager === true || creator.user_role === 'manager';
 
   // Format creator types for display
   const creatorTypeDisplay = creatorTypes.join(' / ');
