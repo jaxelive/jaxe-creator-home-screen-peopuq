@@ -187,7 +187,8 @@ export default function HomeScreen() {
         liveHours: Math.floor(creator.live_duration_seconds_30d / 3600),
         hasManager: !!creator.manager,
         managerName: creator.manager ? `${creator.manager.first_name} ${creator.manager.last_name}` : 'None',
-        creatorType: creator.creator_type
+        creatorType: creator.creator_type,
+        userRole: creator.user_role
       });
       fetchBattleData();
       fetchChallengeData();
@@ -614,6 +615,9 @@ export default function HomeScreen() {
     ? creator.creator_type 
     : ['Creator'];
 
+  // Check if user is a manager
+  const isManager = creator.user_role === 'manager';
+
   // Calculate tier and next tier from real data with region-based logic
   const currentDiamonds = creator.diamonds_monthly || 0;
   const currentTier = getTierFromDiamonds(currentDiamonds, region);
@@ -715,7 +719,7 @@ export default function HomeScreen() {
                     <View style={styles.regionBadge}>
                       <Text style={styles.regionBadgeText}>Creator</Text>
                     </View>
-                    {creator.user_role === 'manager' && (
+                    {isManager && (
                       <View style={styles.managerBadge}>
                         <Text style={styles.managerBadgeText}>Manager</Text>
                       </View>
@@ -1248,6 +1252,96 @@ export default function HomeScreen() {
                 </View>
               </CardPressable>
 
+              {/* MANAGER TOOLS SECTION - ONLY FOR MANAGERS */}
+              {isManager && (
+                <View style={styles.darkCard}>
+                  <View style={styles.cardHeader}>
+                    <Text style={styles.cardEmoji}>👔</Text>
+                    <View style={styles.cardHeaderText}>
+                      <Text style={styles.cardTitleLarge}>Manager Tools</Text>
+                      <Text style={styles.cardSubtitle}>Manage your creators</Text>
+                    </View>
+                  </View>
+                  <View style={styles.toolsGrid}>
+                    <TouchableOpacity 
+                      style={styles.toolButton}
+                      onPress={() => {
+                        console.log('Manager Portal tapped');
+                        // TODO: Navigate to Manager Portal
+                      }}
+                    >
+                      <View style={styles.toolIconContainer}>
+                        <IconSymbol 
+                          ios_icon_name="person.3.fill" 
+                          android_material_icon_name="groups" 
+                          size={24} 
+                          color="#10B981" 
+                        />
+                      </View>
+                      <Text style={styles.toolButtonText}>Manager Portal</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+
+              {/* CREATOR TOOLS SECTION */}
+              <View style={styles.darkCard}>
+                <View style={styles.cardHeader}>
+                  <Text style={styles.cardEmoji}>🛠️</Text>
+                  <View style={styles.cardHeaderText}>
+                    <Text style={styles.cardTitleLarge}>Creator Tools</Text>
+                    <Text style={styles.cardSubtitle}>Grow your presence</Text>
+                  </View>
+                </View>
+                <View style={styles.toolsGrid}>
+                  <TouchableOpacity 
+                    style={styles.toolButton}
+                    onPress={() => {
+                      console.log('Promote Myself tapped');
+                      // TODO: Navigate to Promote screen
+                    }}
+                  >
+                    <View style={styles.toolIconContainer}>
+                      <IconSymbol 
+                        ios_icon_name="megaphone.fill" 
+                        android_material_icon_name="campaign" 
+                        size={24} 
+                        color="#6642EF" 
+                      />
+                    </View>
+                    <Text style={styles.toolButtonText}>Promote Myself</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={styles.toolButton}
+                    onPress={() => router.push('/(tabs)/battles')}
+                  >
+                    <View style={styles.toolIconContainer}>
+                      <IconSymbol 
+                        ios_icon_name="flame.fill" 
+                        android_material_icon_name="whatshot" 
+                        size={24} 
+                        color="#F59E0B" 
+                      />
+                    </View>
+                    <Text style={styles.toolButtonText}>Battles</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={styles.toolButton}
+                    onPress={() => router.push('/(tabs)/ai-flyers')}
+                  >
+                    <View style={styles.toolIconContainer}>
+                      <IconSymbol 
+                        ios_icon_name="wand.and.stars" 
+                        android_material_icon_name="auto-awesome" 
+                        size={24} 
+                        color="#6642EF" 
+                      />
+                    </View>
+                    <Text style={styles.toolButtonText}>Flyer AI</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
               {/* AI FLYER CARD */}
               <CardPressable onPress={() => router.push('/(tabs)/ai-flyers')}>
                 <View style={styles.darkCard}>
@@ -1772,6 +1866,29 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     marginBottom: 16,
   },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  cardEmoji: {
+    fontSize: 32,
+    marginRight: 12,
+  },
+  cardHeaderText: {
+    flex: 1,
+  },
+  cardTitleLarge: {
+    fontSize: 20,
+    fontFamily: 'Poppins_700Bold',
+    color: '#FFFFFF',
+    marginBottom: 2,
+  },
+  cardSubtitle: {
+    fontSize: 13,
+    fontFamily: 'Poppins_500Medium',
+    color: '#A0A0A0',
+  },
 
   // 21-DAY CHALLENGE
   challengeDays: {
@@ -2209,6 +2326,33 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_600SemiBold',
     color: '#A0A0A0',
     letterSpacing: 0.5,
+  },
+
+  // TOOLS GRID
+  toolsGrid: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    gap: 16,
+    flexWrap: 'wrap',
+  },
+  toolButton: {
+    alignItems: 'center',
+    width: 100,
+  },
+  toolIconContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#2A2A2A',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  toolButtonText: {
+    fontSize: 13,
+    fontFamily: 'Poppins_600SemiBold',
+    color: '#FFFFFF',
+    textAlign: 'center',
   },
 
   // AI FLYER CARD

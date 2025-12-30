@@ -1,6 +1,6 @@
 
 import React, { useRef, useEffect } from "react";
-import { Stack } from "expo-router";
+import { Stack, router } from "expo-router";
 import { 
   ScrollView, 
   StyleSheet, 
@@ -454,7 +454,49 @@ export default function HomeScreen() {
             </CardPressable>
           </AnimatedCard>
 
-          <AnimatedCard delay={600} animationType="fadeSlide">
+          {/* MANAGER TOOLS SECTION - ONLY FOR MANAGERS */}
+          {isManager && (
+            <AnimatedCard delay={600} animationType="fadeSlide">
+              <CardPressable onPress={() => console.log('Manager Tools tapped')}>
+                <View style={styles.card}>
+                  <View style={styles.cardHeader}>
+                    <Text style={styles.cardEmoji}>👔</Text>
+                    <View style={styles.cardHeaderText}>
+                      <Text style={styles.cardTitleLarge}>Manager Tools</Text>
+                      <Text style={styles.cardSubtitle}>Manage your creators</Text>
+                    </View>
+                  </View>
+                  <View style={styles.toolsGrid}>
+                    <TouchableOpacity 
+                      style={styles.toolButton}
+                      onPress={() => {
+                        console.log('Manager Portal tapped');
+                        // TODO: Navigate to Manager Portal
+                      }}
+                    >
+                      <LinearGradient
+                        colors={['#D1FAE5', '#A7F3D0']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={styles.toolIconContainer}
+                      >
+                        <IconSymbol 
+                          ios_icon_name="person.3.fill" 
+                          android_material_icon_name="groups" 
+                          size={24} 
+                          color={colors.success} 
+                        />
+                      </LinearGradient>
+                      <Text style={styles.toolButtonText}>Manager Portal</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </CardPressable>
+            </AnimatedCard>
+          )}
+
+          {/* CREATOR TOOLS SECTION */}
+          <AnimatedCard delay={isManager ? 700 : 600} animationType="fadeSlide">
             <CardPressable onPress={() => console.log('Tools tapped')}>
               <View style={styles.card}>
                 <View style={styles.cardHeader}>
@@ -518,7 +560,7 @@ export default function HomeScreen() {
             </CardPressable>
           </AnimatedCard>
 
-          <AnimatedCard delay={700} animationType="fadeSlide">
+          <AnimatedCard delay={isManager ? 800 : 700} animationType="fadeSlide">
             <CardPressable onPress={() => console.log('Manager tapped')}>
               <View style={styles.card}>
                 <View style={styles.cardHeader}>
