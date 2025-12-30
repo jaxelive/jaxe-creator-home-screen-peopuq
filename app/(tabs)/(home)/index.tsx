@@ -723,17 +723,11 @@ export default function HomeScreen() {
                     <View style={styles.regionBadge}>
                       <Text style={styles.regionBadgeText}>{region}</Text>
                     </View>
-                    <View style={styles.regionBadge}>
-                      <Text style={styles.regionBadgeText}>Creator</Text>
+                    <View style={styles.creatorBadge}>
+                      <Text style={styles.creatorBadgeText}>Creator</Text>
                     </View>
                     {isManager && (
                       <View style={styles.managerBadge}>
-                        <IconSymbol 
-                          ios_icon_name="star.fill" 
-                          android_material_icon_name="star" 
-                          size={14} 
-                          color="#FFFFFF" 
-                        />
                         <Text style={styles.managerBadgeText}>Manager</Text>
                       </View>
                     )}
@@ -1577,22 +1571,27 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_500Medium',
     color: '#A0A0A0',
   },
+  creatorBadge: {
+    backgroundColor: '#6642EF',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  creatorBadgeText: {
+    fontSize: 11,
+    fontFamily: 'Poppins_600SemiBold',
+    color: '#FFFFFF',
+  },
   managerBadge: {
     backgroundColor: '#10B981',
     paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingVertical: 4,
     borderRadius: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    borderWidth: 2,
-    borderColor: '#34D399',
   },
   managerBadgeText: {
-    fontSize: 12,
-    fontFamily: 'Poppins_700Bold',
+    fontSize: 11,
+    fontFamily: 'Poppins_600SemiBold',
     color: '#FFFFFF',
-    letterSpacing: 0.5,
   },
   headerIcons: {
     flexDirection: 'row',

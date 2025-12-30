@@ -190,15 +190,14 @@ export default function HomeScreen() {
                     </LinearGradient>
                   ))}
                   {isManager && (
-                    <View style={styles.managerBadge}>
-                      <IconSymbol 
-                        ios_icon_name="star.fill" 
-                        android_material_icon_name="star" 
-                        size={12} 
-                        color="#FFFFFF" 
-                      />
-                      <Text style={styles.managerBadgeText}>Manager</Text>
-                    </View>
+                    <LinearGradient
+                      colors={['#10B981', '#059669']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={styles.liveBadge}
+                    >
+                      <Text style={styles.liveBadgeText}>Manager</Text>
+                    </LinearGradient>
                   )}
                 </View>
               </View>
@@ -712,20 +711,6 @@ const styles = StyleSheet.create({
   liveBadgeText: {
     fontSize: 12,
     fontFamily: 'Poppins_600SemiBold',
-    color: '#FFFFFF',
-  },
-  managerBadge: {
-    backgroundColor: '#10B981',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  managerBadgeText: {
-    fontSize: 12,
-    fontFamily: 'Poppins_700Bold',
     color: '#FFFFFF',
   },
   card: {
