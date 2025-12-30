@@ -21,7 +21,7 @@ import { useCreatorData } from '@/hooks/useCreatorData';
 
 const CREATOR_HANDLE = 'avelezsanti';
 
-interface ManagerData {
+interface ManagerIdentity {
   id: string;
   user_id: string;
   first_name: string;
@@ -31,9 +31,12 @@ interface ManagerData {
   whatsapp: string | null;
   tiktok_handle: string | null;
   promoted_to_manager_at: string | null;
+  manager_avatar_url: string | null;
+  regions_managed: string[];
+  languages: string[];
 }
 
-interface CreatorData {
+interface AssignedCreator {
   id: string;
   first_name: string;
   last_name: string;
@@ -42,6 +45,7 @@ interface CreatorData {
   region: string | null;
   graduation_status: string | null;
   total_diamonds: number;
+  diamonds_monthly: number;
   phone: string | null;
   avatar_url: string | null;
   profile_picture_url: string | null;
@@ -63,8 +67,8 @@ export default function ManagerPortalScreen() {
   });
 
   const { creator, loading: creatorLoading } = useCreatorData(CREATOR_HANDLE);
-  const [manager, setManager] = useState<ManagerData | null>(null);
-  const [assignedCreators, setAssignedCreators] = useState<CreatorData[]>([]);
+  const [managerIdentity, setManagerIdentity] = useState<ManagerIdentity | null>(null);
+  const [assignedCreators, setAssignedCreators] = useState<AssignedCreator[]>([]);
   const [stats, setStats] = useState<ManagerStats>({
     totalCreators: 0,
     totalRookies: 0,
@@ -75,117 +79,162 @@ export default function ManagerPortalScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchManagerData = useCallback(async () => {
+  const fetchManagerPortalData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
-      console.log('[ManagerPortal] Fetching manager data for creator:', CREATOR_HANDLE);
+      console.log('[ManagerPortal] 🎯 Fetching manager portal data for logged-in user');
 
-      // Get the logged-in creator's manager ID
-      if (!creator?.assigned_manager_id) {
-        console.log('[ManagerPortal] No manager assigned to creator');
-        setError('You do not have a manager assigned yet.');
+      // CRITICAL: Get the logged-in user's manager identity
+      // This is NOT about the manager they report to, but their own manager account
+      if (!creator) {
+        console.log('[ManagerPortal] ❌ No creator data available');
+        setError('User data not available');
         setLoading(false);
         return;
       }
 
-      const managerId = creator.assigned_manager_id;
-      console.log('[ManagerPortal] Manager ID:', managerId);
+      // Check if the logged-in user is a manager
+      if (creator.user_role !== 'manager') {
+        console.log('[ManagerPortal] ❌ User is not a manager. Role:', creator.user_role);
+        setError('You do not have manager access. This portal is only for managers.');
+        setLoading(false);
+        return;
+      }
 
-      // Fetch manager details
+      console.log('[ManagerPortal] ✅ User is a manager. Fetching manager identity...');
+
+      // Find the manager record for this user
+      // The creator has a user_id that links to the users table
+      // We need to find the managers record where user_id matches
+      const { data: usersData, error: usersError } = await supabase
+        .from('users')
+        .select('id, first_name, last_name, email, avatar_url, role, creator_id')
+        .eq('creator_id', creator.id)
+        .eq('role', 'manager')
+        .single();
+
+      if (usersError) {
+        console.error('[ManagerPortal] ❌ Error fetching user data:', usersError);
+        setError('Failed to fetch manager identity');
+        setLoading(false);
+        return;
+      }
+
+      if (!usersData) {
+        console.log('[ManagerPortal] ❌ No user record found for this creator');
+        setError('Manager identity not found');
+        setLoading(false);
+        return;
+      }
+
+      console.log('[ManagerPortal] ✅ User record found:', usersData.id);
+
+      // Now fetch the manager record
       const { data: managerData, error: managerError } = await supabase
         .from('managers')
-        .select(`
-          id,
-          user_id,
-          whatsapp,
-          tiktok_handle,
-          avatar_url,
-          promoted_to_manager_at,
-          users:user_id (
-            id,
-            first_name,
-            last_name,
-            email,
-            avatar_url
-          )
-        `)
-        .eq('id', managerId)
+        .select('*')
+        .eq('user_id', usersData.id)
         .single();
 
       if (managerError) {
-        console.error('[ManagerPortal] Manager fetch error:', managerError);
-        setError(managerError.message);
+        console.error('[ManagerPortal] ❌ Error fetching manager record:', managerError);
+        setError('Failed to fetch manager details');
         setLoading(false);
         return;
       }
 
-      if (managerData && managerData.users) {
-        const managerUser = managerData.users as any;
-        const managerInfo: ManagerData = {
-          id: managerData.id,
-          user_id: managerUser.id,
-          first_name: managerUser.first_name,
-          last_name: managerUser.last_name,
-          email: managerUser.email,
-          avatar_url: managerData.avatar_url || managerUser.avatar_url,
-          whatsapp: managerData.whatsapp,
-          tiktok_handle: managerData.tiktok_handle,
-          promoted_to_manager_at: managerData.promoted_to_manager_at,
-        };
+      if (!managerData) {
+        console.log('[ManagerPortal] ❌ No manager record found');
+        setError('Manager record not found');
+        setLoading(false);
+        return;
+      }
 
-        console.log('[ManagerPortal] Manager data loaded:', managerInfo);
-        setManager(managerInfo);
+      console.log('[ManagerPortal] ✅ Manager record found:', managerData.id);
 
-        // Fetch all creators assigned to this manager
-        const { data: creatorsData, error: creatorsError } = await supabase
-          .from('creators')
-          .select('id, first_name, last_name, creator_handle, email, region, graduation_status, total_diamonds, phone, avatar_url, profile_picture_url')
-          .eq('assigned_manager_id', managerId)
-          .eq('is_active', true)
-          .order('total_diamonds', { ascending: false });
+      // Build manager identity
+      const regions: string[] = [];
+      if (managerData.manages_us) regions.push('USA & Canada');
+      if (managerData.manages_latam) regions.push('Latin America');
 
-        if (creatorsError) {
-          console.error('[ManagerPortal] Creators fetch error:', creatorsError);
-        } else {
-          console.log('[ManagerPortal] Assigned creators loaded:', creatorsData?.length || 0);
-          setAssignedCreators(creatorsData || []);
+      const languages: string[] = [];
+      if (managerData.language_preference === 'english') languages.push('English');
+      else if (managerData.language_preference === 'spanish') languages.push('Español');
+      else if (managerData.language_preference === 'bilingual') languages.push('English', 'Español');
 
-          // Calculate stats
-          const totalCreators = creatorsData?.length || 0;
-          const totalRookies = creatorsData?.filter(c => 
-            !c.graduation_status || 
-            c.graduation_status.toLowerCase().includes('rookie') ||
-            c.graduation_status.toLowerCase().includes('new')
-          ).length || 0;
-          const totalGraduated = creatorsData?.filter(c => 
-            c.graduation_status && 
-            (c.graduation_status.toLowerCase().includes('silver') || 
-             c.graduation_status.toLowerCase().includes('gold'))
-          ).length || 0;
-          const collectiveDiamonds = creatorsData?.reduce((sum, c) => sum + (c.total_diamonds || 0), 0) || 0;
+      const identity: ManagerIdentity = {
+        id: managerData.id,
+        user_id: usersData.id,
+        first_name: usersData.first_name,
+        last_name: usersData.last_name,
+        email: usersData.email,
+        avatar_url: usersData.avatar_url,
+        whatsapp: managerData.whatsapp,
+        tiktok_handle: managerData.tiktok_handle,
+        promoted_to_manager_at: managerData.promoted_to_manager_at,
+        manager_avatar_url: managerData.avatar_url,
+        regions_managed: regions,
+        languages: languages,
+      };
 
-          setStats({
-            totalCreators,
-            totalRookies,
-            totalGraduated,
-            collectiveDiamonds,
-          });
+      console.log('[ManagerPortal] ✅ Manager identity built:', {
+        name: `${identity.first_name} ${identity.last_name}`,
+        email: identity.email,
+        regions: identity.regions_managed,
+        languages: identity.languages,
+      });
 
-          console.log('[ManagerPortal] Stats calculated:', {
-            totalCreators,
-            totalRookies,
-            totalGraduated,
-            collectiveDiamonds,
-          });
-        }
+      setManagerIdentity(identity);
+
+      // Fetch all creators assigned to THIS manager
+      console.log('[ManagerPortal] 📊 Fetching assigned creators for manager:', managerData.id);
+
+      const { data: creatorsData, error: creatorsError } = await supabase
+        .from('creators')
+        .select('id, first_name, last_name, creator_handle, email, region, graduation_status, total_diamonds, diamonds_monthly, phone, avatar_url, profile_picture_url')
+        .eq('assigned_manager_id', managerData.id)
+        .eq('is_active', true)
+        .order('diamonds_monthly', { ascending: false });
+
+      if (creatorsError) {
+        console.error('[ManagerPortal] ❌ Error fetching assigned creators:', creatorsError);
       } else {
-        setError('Manager not found');
+        console.log('[ManagerPortal] ✅ Assigned creators loaded:', creatorsData?.length || 0);
+        setAssignedCreators(creatorsData || []);
+
+        // Calculate stats
+        const totalCreators = creatorsData?.length || 0;
+        const totalRookies = creatorsData?.filter(c => 
+          !c.graduation_status || 
+          c.graduation_status.toLowerCase().includes('rookie') ||
+          c.graduation_status.toLowerCase().includes('new')
+        ).length || 0;
+        const totalGraduated = creatorsData?.filter(c => 
+          c.graduation_status && 
+          (c.graduation_status.toLowerCase().includes('silver') || 
+           c.graduation_status.toLowerCase().includes('gold'))
+        ).length || 0;
+        const collectiveDiamonds = creatorsData?.reduce((sum, c) => sum + (c.diamonds_monthly || 0), 0) || 0;
+
+        setStats({
+          totalCreators,
+          totalRookies,
+          totalGraduated,
+          collectiveDiamonds,
+        });
+
+        console.log('[ManagerPortal] ✅ Stats calculated:', {
+          totalCreators,
+          totalRookies,
+          totalGraduated,
+          collectiveDiamonds,
+        });
       }
     } catch (err: any) {
-      console.error('[ManagerPortal] Unexpected error:', err);
-      setError(err?.message || 'Failed to fetch manager data');
+      console.error('[ManagerPortal] ❌ Unexpected error:', err);
+      setError(err?.message || 'Failed to fetch manager portal data');
     } finally {
       setLoading(false);
     }
@@ -193,13 +242,14 @@ export default function ManagerPortalScreen() {
 
   useEffect(() => {
     if (creator && !creatorLoading) {
-      fetchManagerData();
+      console.log('[ManagerPortal] 🚀 Creator loaded, fetching manager portal data');
+      fetchManagerPortalData();
     }
-  }, [creator, creatorLoading]);
+  }, [creator, creatorLoading, fetchManagerPortalData]);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await fetchManagerData();
+    await fetchManagerPortalData();
     setRefreshing(false);
   };
 
@@ -274,7 +324,7 @@ export default function ManagerPortalScreen() {
     );
   }
 
-  if (error || !manager) {
+  if (error || !managerIdentity) {
     return (
       <>
         <Stack.Screen
@@ -292,8 +342,8 @@ export default function ManagerPortalScreen() {
             size={64}
             color={colors.error}
           />
-          <Text style={styles.errorText}>{error || 'Manager not found'}</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={fetchManagerData}>
+          <Text style={styles.errorText}>{error || 'Manager identity not found'}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={fetchManagerPortalData}>
             <Text style={styles.retryButtonText}>Try Again</Text>
           </TouchableOpacity>
         </View>
@@ -301,7 +351,7 @@ export default function ManagerPortalScreen() {
     );
   }
 
-  const profileImageUrl = manager.avatar_url || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&h=200&fit=crop';
+  const profileImageUrl = managerIdentity.manager_avatar_url || managerIdentity.avatar_url || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&h=200&fit=crop';
 
   return (
     <>
@@ -325,7 +375,7 @@ export default function ManagerPortalScreen() {
           />
         }
       >
-        {/* MANAGER HEADER SECTION */}
+        {/* MANAGER IDENTITY SECTION */}
         <View style={styles.headerCard}>
           <View style={styles.headerTop}>
             <View style={styles.profileImageContainer}>
@@ -337,11 +387,11 @@ export default function ManagerPortalScreen() {
             </View>
             <View style={styles.headerInfo}>
               <Text style={styles.managerName}>
-                {manager.first_name} {manager.last_name}
+                {managerIdentity.first_name} {managerIdentity.last_name}
               </Text>
               <TouchableOpacity 
                 style={styles.emailRow}
-                onPress={() => handleEmailPress(manager.email)}
+                onPress={() => handleEmailPress(managerIdentity.email)}
               >
                 <IconSymbol
                   ios_icon_name="envelope.fill"
@@ -349,7 +399,7 @@ export default function ManagerPortalScreen() {
                   size={16}
                   color={colors.primary}
                 />
-                <Text style={styles.emailText}>{manager.email}</Text>
+                <Text style={styles.emailText}>{managerIdentity.email}</Text>
               </TouchableOpacity>
               <View style={styles.managerSinceRow}>
                 <IconSymbol
@@ -359,18 +409,46 @@ export default function ManagerPortalScreen() {
                   color={colors.textSecondary}
                 />
                 <Text style={styles.managerSinceText}>
-                  Manager Since: {formatDate(manager.promoted_to_manager_at)}
+                  Manager Since: {formatDate(managerIdentity.promoted_to_manager_at)}
                 </Text>
               </View>
             </View>
           </View>
 
+          {/* Manager Details */}
+          <View style={styles.managerDetails}>
+            {managerIdentity.regions_managed.length > 0 && (
+              <View style={styles.detailRow}>
+                <IconSymbol
+                  ios_icon_name="globe"
+                  android_material_icon_name="public"
+                  size={18}
+                  color={colors.textSecondary}
+                />
+                <Text style={styles.detailLabel}>Regions:</Text>
+                <Text style={styles.detailValue}>{managerIdentity.regions_managed.join(', ')}</Text>
+              </View>
+            )}
+            {managerIdentity.languages.length > 0 && (
+              <View style={styles.detailRow}>
+                <IconSymbol
+                  ios_icon_name="text.bubble"
+                  android_material_icon_name="language"
+                  size={18}
+                  color={colors.textSecondary}
+                />
+                <Text style={styles.detailLabel}>Languages:</Text>
+                <Text style={styles.detailValue}>{managerIdentity.languages.join(', ')}</Text>
+              </View>
+            )}
+          </View>
+
           {/* Quick Contact Actions */}
           <View style={styles.quickActions}>
-            {manager.tiktok_handle && (
+            {managerIdentity.tiktok_handle && (
               <TouchableOpacity 
                 style={styles.quickActionButton}
-                onPress={() => handleTikTokPress(manager.tiktok_handle!)}
+                onPress={() => handleTikTokPress(managerIdentity.tiktok_handle!)}
               >
                 <IconSymbol
                   ios_icon_name="music.note"
@@ -381,10 +459,10 @@ export default function ManagerPortalScreen() {
                 <Text style={styles.quickActionText}>TikTok</Text>
               </TouchableOpacity>
             )}
-            {manager.whatsapp && (
+            {managerIdentity.whatsapp && (
               <TouchableOpacity 
                 style={styles.quickActionButton}
-                onPress={() => handleWhatsAppPress(manager.whatsapp!)}
+                onPress={() => handleWhatsAppPress(managerIdentity.whatsapp!)}
               >
                 <IconSymbol
                   ios_icon_name="message.fill"
@@ -397,7 +475,7 @@ export default function ManagerPortalScreen() {
             )}
             <TouchableOpacity 
               style={styles.quickActionButton}
-              onPress={() => handleEmailPress(manager.email)}
+              onPress={() => handleEmailPress(managerIdentity.email)}
             >
               <IconSymbol
                 ios_icon_name="envelope.fill"
@@ -410,7 +488,7 @@ export default function ManagerPortalScreen() {
           </View>
         </View>
 
-        {/* MANAGER STATS SECTION */}
+        {/* MANAGER PERFORMANCE SECTION */}
         <View style={styles.statsCard}>
           <Text style={styles.sectionTitle}>Performance Summary</Text>
           <View style={styles.statsGrid}>
@@ -465,7 +543,7 @@ export default function ManagerPortalScreen() {
               <Text style={styles.statValue}>
                 {stats.collectiveDiamonds.toLocaleString()}
               </Text>
-              <Text style={styles.statLabel}>Collective Diamonds</Text>
+              <Text style={styles.statLabel}>Monthly Diamonds</Text>
             </View>
           </View>
         </View>
@@ -473,7 +551,7 @@ export default function ManagerPortalScreen() {
         {/* ASSIGNED CREATORS SECTION */}
         <View style={styles.creatorsCard}>
           <Text style={styles.sectionTitle}>
-            Assigned Creators ({assignedCreators.length})
+            My Assigned Creators ({assignedCreators.length})
           </Text>
           
           {assignedCreators.length === 0 ? (
@@ -488,13 +566,13 @@ export default function ManagerPortalScreen() {
             </View>
           ) : (
             <View style={styles.creatorsList}>
-              {assignedCreators.map((creator, index) => (
-                <View key={creator.id} style={styles.creatorRow}>
+              {assignedCreators.map((assignedCreator, index) => (
+                <View key={assignedCreator.id} style={styles.creatorRow}>
                   {/* Creator Avatar */}
                   <View style={styles.creatorAvatarContainer}>
-                    {creator.avatar_url || creator.profile_picture_url ? (
+                    {assignedCreator.avatar_url || assignedCreator.profile_picture_url ? (
                       <Image
-                        source={{ uri: creator.avatar_url || creator.profile_picture_url }}
+                        source={{ uri: assignedCreator.avatar_url || assignedCreator.profile_picture_url }}
                         style={styles.creatorAvatar}
                       />
                     ) : (
@@ -513,24 +591,24 @@ export default function ManagerPortalScreen() {
                   <View style={styles.creatorInfo}>
                     <View style={styles.creatorNameRow}>
                       <Text style={styles.creatorName}>
-                        {creator.first_name} {creator.last_name}
+                        {assignedCreator.first_name} {assignedCreator.last_name}
                       </Text>
-                      {creator.graduation_status && (
+                      {assignedCreator.graduation_status && (
                         <View 
                           style={[
                             styles.graduationBadge,
-                            { backgroundColor: getGraduationBadgeColor(creator.graduation_status) }
+                            { backgroundColor: getGraduationBadgeColor(assignedCreator.graduation_status) }
                           ]}
                         >
                           <Text style={styles.graduationBadgeText}>
-                            {creator.graduation_status}
+                            {assignedCreator.graduation_status}
                           </Text>
                         </View>
                       )}
                     </View>
                     
                     <View style={styles.creatorDetailsRow}>
-                      {creator.region && (
+                      {assignedCreator.region && (
                         <View style={styles.creatorDetail}>
                           <IconSymbol
                             ios_icon_name="location.fill"
@@ -538,7 +616,7 @@ export default function ManagerPortalScreen() {
                             size={14}
                             color={colors.textSecondary}
                           />
-                          <Text style={styles.creatorDetailText}>{creator.region}</Text>
+                          <Text style={styles.creatorDetailText}>{assignedCreator.region}</Text>
                         </View>
                       )}
                       <View style={styles.creatorDetail}>
@@ -549,7 +627,7 @@ export default function ManagerPortalScreen() {
                           color={colors.textSecondary}
                         />
                         <Text style={styles.creatorDetailText}>
-                          {creator.total_diamonds.toLocaleString()}
+                          {assignedCreator.diamonds_monthly.toLocaleString()} / month
                         </Text>
                       </View>
                     </View>
@@ -558,7 +636,7 @@ export default function ManagerPortalScreen() {
                     <View style={styles.creatorActions}>
                       <TouchableOpacity 
                         style={styles.creatorActionButton}
-                        onPress={() => handleEmailPress(creator.email)}
+                        onPress={() => handleEmailPress(assignedCreator.email)}
                       >
                         <IconSymbol
                           ios_icon_name="envelope.fill"
@@ -571,7 +649,7 @@ export default function ManagerPortalScreen() {
 
                       <TouchableOpacity 
                         style={styles.creatorActionButton}
-                        onPress={() => handleTikTokPress(creator.creator_handle)}
+                        onPress={() => handleTikTokPress(assignedCreator.creator_handle)}
                       >
                         <IconSymbol
                           ios_icon_name="music.note"
@@ -582,10 +660,10 @@ export default function ManagerPortalScreen() {
                         <Text style={styles.creatorActionText}>TikTok</Text>
                       </TouchableOpacity>
 
-                      {creator.phone && (
+                      {assignedCreator.phone && (
                         <TouchableOpacity 
                           style={styles.creatorActionButton}
-                          onPress={() => handleWhatsAppPress(creator.phone!)}
+                          onPress={() => handleWhatsAppPress(assignedCreator.phone!)}
                         >
                           <IconSymbol
                             ios_icon_name="message.fill"
@@ -714,6 +792,25 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: 'Poppins_400Regular',
     color: colors.textSecondary,
+  },
+  managerDetails: {
+    gap: 12,
+    marginBottom: 20,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  detailLabel: {
+    fontSize: 14,
+    fontFamily: 'Poppins_600SemiBold',
+    color: colors.textSecondary,
+  },
+  detailValue: {
+    fontSize: 14,
+    fontFamily: 'Poppins_500Medium',
+    color: colors.text,
   },
   quickActions: {
     flexDirection: 'row',
