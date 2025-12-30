@@ -47,6 +47,18 @@ export default function HomeScreen() {
     }).start();
   }, []);
 
+  useEffect(() => {
+    if (creator) {
+      console.log('[HomeScreen iOS] Creator loaded:', {
+        handle: creator.creator_handle,
+        name: `${creator.first_name} ${creator.last_name}`,
+        userRole: creator.user_role,
+        isManager: creator.is_manager,
+        '🎯 SHOULD SHOW MANAGER BADGE': creator.is_manager ? 'YES ✅' : 'NO ❌'
+      });
+    }
+  }, [creator]);
+
   const headerScale = scrollY.interpolate({
     inputRange: [0, 100],
     outputRange: [1, 0.96],
@@ -118,8 +130,10 @@ export default function HomeScreen() {
   
   const region = creator.region || 'USA / Canada';
 
-  // Check if user is a manager - check both is_manager flag and user_role
-  const isManager = creator.is_manager === true || creator.user_role === 'manager';
+  // Check if user is a manager - just check is_manager flag
+  const isManager = creator.is_manager === true;
+
+  console.log('[HomeScreen iOS] Rendering with isManager:', isManager, 'creator.is_manager:', creator.is_manager);
 
   // Format creator types for display
   const creatorTypeDisplay = creatorTypes.join(' / ');

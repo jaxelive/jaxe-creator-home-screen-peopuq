@@ -189,7 +189,8 @@ export default function HomeScreen() {
         managerName: creator.manager ? `${creator.manager.first_name} ${creator.manager.last_name}` : 'None',
         creatorType: creator.creator_type,
         userRole: creator.user_role,
-        isManager: creator.is_manager
+        isManager: creator.is_manager,
+        '🎯 SHOULD SHOW MANAGER BADGE': creator.is_manager ? 'YES ✅' : 'NO ❌'
       });
       fetchBattleData();
       fetchChallengeData();
@@ -616,8 +617,10 @@ export default function HomeScreen() {
     ? creator.creator_type 
     : ['Creator'];
 
-  // Check if user is a manager - check both is_manager flag and user_role
-  const isManager = creator.is_manager === true || creator.user_role === 'manager';
+  // Check if user is a manager - just check is_manager flag
+  const isManager = creator.is_manager === true;
+
+  console.log('[HomeScreen] Rendering with isManager:', isManager, 'creator.is_manager:', creator.is_manager);
 
   // Calculate tier and next tier from real data with region-based logic
   const currentDiamonds = creator.diamonds_monthly || 0;

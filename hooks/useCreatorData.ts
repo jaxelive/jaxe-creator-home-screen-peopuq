@@ -113,16 +113,16 @@ export function useCreatorData(creatorHandle: string = 'avelezsanti') {
           .from('managers')
           .select('id')
           .eq('user_id', userData.id)
-          .single();
+          .maybeSingle();
 
         if (managerCheckError) {
-          if (managerCheckError.code !== 'PGRST116') {
-            console.warn('[useCreatorData] Manager check error:', managerCheckError);
-          }
+          console.warn('[useCreatorData] Manager check error:', managerCheckError);
           isManager = false;
         } else if (managerCheck) {
           isManager = true;
-          console.log('[useCreatorData] User is a manager:', managerCheck.id);
+          console.log('[useCreatorData] ✅ User IS a manager - manager record found:', managerCheck.id);
+        } else {
+          console.log('[useCreatorData] ❌ User is NOT a manager - no manager record found');
         }
       }
 
@@ -189,7 +189,8 @@ export function useCreatorData(creatorHandle: string = 'avelezsanti') {
         hasManager: !!managerData,
         managerName: managerData ? `${managerData.first_name} ${managerData.last_name}` : 'None',
         userRole: userRole,
-        isManager: isManager
+        isManager: isManager,
+        '🎯 MANAGER BADGE SHOULD SHOW': isManager ? 'YES ✅' : 'NO ❌'
       });
       
       setCreator(transformedCreator);
