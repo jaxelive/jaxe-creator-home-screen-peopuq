@@ -77,79 +77,87 @@ export default function ManagerPortalScreen() {
       setLoading(true);
       setError(null);
 
-      console.log('[ManagerPortal] Fetching authenticated user');
+      console.log('[ManagerPortal] Starting data fetch');
 
-      // Get the authenticated user
+      // Step 1: Get the authenticated user
       const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
       
       if (authError) {
         console.error('[ManagerPortal] Auth error:', authError);
-        setError('Authentication error. Please log in again.');
+        setError(`Authentication error: ${authError.message}`);
         setLoading(false);
         return;
       }
 
       if (!authUser) {
         console.warn('[ManagerPortal] No authenticated user');
-        setError('You must be logged in to access the Manager Portal.');
+        setError('You must be logged in to access the Manager Portal. Please sign in and try again.');
         setLoading(false);
         return;
       }
 
       console.log('[ManagerPortal] Authenticated user ID:', authUser.id);
+      console.log('[ManagerPortal] User email:', authUser.email);
 
-      // Fetch the user record to check their role
+      // Step 2: Fetch the user record to check their role
+      console.log('[ManagerPortal] Fetching user record from users table...');
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select('id, role, first_name, last_name, email, avatar_url')
         .eq('auth_user_id', authUser.id)
-        .single();
+        .maybeSingle();
 
       if (userError) {
         console.error('[ManagerPortal] User fetch error:', userError);
-        setError('Could not fetch user data.');
+        setError(`Database error: ${userError.message}. Please contact support.`);
         setLoading(false);
         return;
       }
 
       if (!userData) {
-        console.warn('[ManagerPortal] No user record found');
-        setError('User record not found.');
+        console.warn('[ManagerPortal] No user record found for auth_user_id:', authUser.id);
+        setError('Your user profile was not found in the system. Please contact support to set up your account.');
         setLoading(false);
         return;
       }
 
-      console.log('[ManagerPortal] User data:', userData);
+      console.log('[ManagerPortal] User data found:', {
+        id: userData.id,
+        role: userData.role,
+        name: `${userData.first_name} ${userData.last_name}`,
+        email: userData.email
+      });
 
-      // Check if user has manager role
+      // Step 3: Check if user has manager role
       if (userData.role !== 'manager') {
-        console.warn('[ManagerPortal] User is not a manager. Role:', userData.role);
-        setError('You do not have manager access. This portal is only available to users with the Manager role.');
+        console.warn('[ManagerPortal] User does not have manager role. Current role:', userData.role);
+        setError(`Access denied. You do not have manager access. Your current role is: ${userData.role || 'none'}. This portal is only available to users with the Manager role.`);
         setIsManager(false);
         setLoading(false);
         return;
       }
 
       setIsManager(true);
-      console.log('[ManagerPortal] User is a manager');
+      console.log('[ManagerPortal] User confirmed as manager');
 
-      // Fetch the manager record for this user
+      // Step 4: Fetch the manager record for this user
+      console.log('[ManagerPortal] Fetching manager record for user_id:', userData.id);
       const { data: managerData, error: managerError } = await supabase
         .from('managers')
         .select('id, whatsapp, tiktok_handle, avatar_url, promoted_to_manager_at')
         .eq('user_id', userData.id)
-        .single();
+        .maybeSingle();
 
       if (managerError) {
         console.error('[ManagerPortal] Manager fetch error:', managerError);
-        setError('Could not fetch manager profile.');
+        setError(`Could not fetch manager profile: ${managerError.message}`);
         setLoading(false);
         return;
       }
 
       if (!managerData) {
-        console.warn('[ManagerPortal] No manager record found for user');
-        setError('Manager profile not found. Please contact support.');
+        console.warn('[ManagerPortal] No manager record found for user_id:', userData.id);
+        setError('Manager profile not found. Your user account has the manager role, but no manager profile exists. Please contact support.');
         setLoading(false);
         return;
       }
@@ -166,10 +174,15 @@ export default function ManagerPortalScreen() {
         promoted_to_manager_at: managerData.promoted_to_manager_at,
       };
 
-      console.log('[ManagerPortal] Manager data loaded:', managerInfo);
+      console.log('[ManagerPortal] Manager data loaded successfully:', {
+        id: managerInfo.id,
+        name: `${managerInfo.first_name} ${managerInfo.last_name}`,
+        email: managerInfo.email
+      });
       setManager(managerInfo);
 
-      // Fetch all creators assigned to this manager
+      // Step 5: Fetch all creators assigned to this manager
+      console.log('[ManagerPortal] Fetching assigned creators for manager_id:', managerData.id);
       const { data: creatorsData, error: creatorsError } = await supabase
         .from('creators')
         .select('id, first_name, last_name, creator_handle, email, region, graduation_status, total_diamonds, phone, avatar_url, profile_picture_url')
@@ -179,11 +192,13 @@ export default function ManagerPortalScreen() {
 
       if (creatorsError) {
         console.error('[ManagerPortal] Creators fetch error:', creatorsError);
+        // Don't fail completely, just log the error
+        console.warn('[ManagerPortal] Could not fetch creators, continuing with empty list');
       } else {
         console.log('[ManagerPortal] Assigned creators loaded:', creatorsData?.length || 0);
         setAssignedCreators(creatorsData || []);
 
-        // Calculate stats
+        // Step 6: Calculate stats
         const totalCreators = creatorsData?.length || 0;
         const totalRookies = creatorsData?.filter(c => 
           !c.graduation_status || 
@@ -211,9 +226,11 @@ export default function ManagerPortalScreen() {
           collectiveDiamonds,
         });
       }
+
+      console.log('[ManagerPortal] Data fetch completed successfully');
     } catch (err: any) {
       console.error('[ManagerPortal] Unexpected error:', err);
-      setError(err?.message || 'Failed to fetch manager data');
+      setError(`Unexpected error: ${err?.message || 'Unknown error occurred'}. Please try again or contact support.`);
     } finally {
       setLoading(false);
     }
@@ -221,7 +238,7 @@ export default function ManagerPortalScreen() {
 
   useEffect(() => {
     fetchManagerData();
-  }, []);
+  }, [fetchManagerData]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -311,21 +328,28 @@ export default function ManagerPortalScreen() {
             headerTintColor: colors.text,
           }}
         />
-        <View style={[styles.container, styles.centerContent]}>
+        <ScrollView style={styles.container} contentContainerStyle={styles.centerContent}>
           <IconSymbol
             ios_icon_name="exclamationmark.triangle.fill"
             android_material_icon_name="warning"
             size={64}
             color={colors.error}
           />
-          <Text style={styles.errorText}>{error || 'Access denied'}</Text>
+          <Text style={styles.errorTitle}>Access Denied</Text>
+          <Text style={styles.errorText}>{error || 'Unable to access Manager Portal'}</Text>
           <TouchableOpacity 
             style={styles.retryButton} 
+            onPress={onRefresh}
+          >
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.backButton} 
             onPress={() => router.back()}
           >
-            <Text style={styles.retryButtonText}>Go Back</Text>
+            <Text style={styles.backButtonText}>Go Back</Text>
           </TouchableOpacity>
-        </View>
+        </ScrollView>
       </>
     );
   }
@@ -648,6 +672,7 @@ const styles = StyleSheet.create({
   centerContent: {
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 32,
   },
   loadingText: {
     marginTop: 16,
@@ -655,13 +680,20 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_500Medium',
     color: colors.textSecondary,
   },
-  errorText: {
-    fontSize: 16,
-    fontFamily: 'Poppins_500Medium',
-    color: colors.error,
+  errorTitle: {
+    fontSize: 24,
+    fontFamily: 'Poppins_700Bold',
+    color: colors.text,
     textAlign: 'center',
-    paddingHorizontal: 32,
     marginTop: 16,
+    marginBottom: 12,
+  },
+  errorText: {
+    fontSize: 15,
+    fontFamily: 'Poppins_400Regular',
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 22,
     marginBottom: 24,
   },
   retryButton: {
@@ -669,11 +701,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
     paddingVertical: 14,
     borderRadius: 16,
+    marginBottom: 12,
   },
   retryButtonText: {
     fontSize: 16,
     fontFamily: 'Poppins_600SemiBold',
     color: '#FFFFFF',
+  },
+  backButton: {
+    backgroundColor: colors.grey,
+    paddingHorizontal: 32,
+    paddingVertical: 14,
+    borderRadius: 16,
+  },
+  backButtonText: {
+    fontSize: 16,
+    fontFamily: 'Poppins_600SemiBold',
+    color: colors.text,
   },
   content: {
     padding: 20,
