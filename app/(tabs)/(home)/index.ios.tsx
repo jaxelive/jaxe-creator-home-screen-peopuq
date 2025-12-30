@@ -47,21 +47,6 @@ export default function HomeScreen() {
     }).start();
   }, []);
 
-  useEffect(() => {
-    if (creator) {
-      console.log('[HomeScreen iOS] ========================================');
-      console.log('[HomeScreen iOS] CREATOR LOADED IN HOME SCREEN:');
-      console.log('[HomeScreen iOS] handle:', creator.creator_handle);
-      console.log('[HomeScreen iOS] name:', `${creator.first_name} ${creator.last_name}`);
-      console.log('[HomeScreen iOS] user_role:', creator.user_role);
-      console.log('[HomeScreen iOS] is_manager:', creator.is_manager);
-      console.log('[HomeScreen iOS] is_manager type:', typeof creator.is_manager);
-      console.log('[HomeScreen iOS] is_manager === true:', creator.is_manager === true);
-      console.log('[HomeScreen iOS] 🎯 SHOULD SHOW MANAGER BADGE:', creator.is_manager ? 'YES ✅✅✅' : 'NO ❌');
-      console.log('[HomeScreen iOS] ========================================');
-    }
-  }, [creator]);
-
   const headerScale = scrollY.interpolate({
     inputRange: [0, 100],
     outputRange: [1, 0.96],
@@ -133,15 +118,8 @@ export default function HomeScreen() {
   
   const region = creator.region || 'USA / Canada';
 
-  // Check if user is a manager - EXPLICIT CHECK
-  const isManager = creator.is_manager === true;
-
-  console.log('[HomeScreen iOS] ========================================');
-  console.log('[HomeScreen iOS] RENDERING HOME SCREEN');
-  console.log('[HomeScreen iOS] creator.is_manager:', creator.is_manager);
-  console.log('[HomeScreen iOS] isManager:', isManager);
-  console.log('[HomeScreen iOS] Will render Manager badge:', isManager ? 'YES ✅✅✅' : 'NO ❌');
-  console.log('[HomeScreen iOS] ========================================');
+  // Check if user is a manager
+  const isManager = creator.user_role === 'manager';
 
   // Format creator types for display
   const creatorTypeDisplay = creatorTypes.join(' / ');
@@ -213,7 +191,7 @@ export default function HomeScreen() {
                   ))}
                   {isManager && (
                     <View style={styles.managerBadge}>
-                      <Text style={styles.managerBadgeText}>✨ Manager</Text>
+                      <Text style={styles.managerBadgeText}>Manager</Text>
                     </View>
                   )}
                 </View>

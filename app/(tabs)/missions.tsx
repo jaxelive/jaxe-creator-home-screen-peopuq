@@ -145,7 +145,7 @@ export default function ToolsScreen() {
                   key={tool.id}
                   style={styles.toolCard}
                   onPress={() => {
-                    console.log(`${tool.title} tapped - navigating to ${tool.route}`);
+                    console.log(`Navigating to ${tool.title} at route: ${tool.route}`);
                     router.push(tool.route as any);
                   }}
                   activeOpacity={0.7}
@@ -176,7 +176,10 @@ export default function ToolsScreen() {
               <TouchableOpacity
                 key={tool.id}
                 style={styles.toolCard}
-                onPress={() => router.push(tool.route as any)}
+                onPress={() => {
+                  console.log(`Navigating to ${tool.title} at route: ${tool.route}`);
+                  router.push(tool.route as any);
+                }}
                 activeOpacity={0.7}
               >
                 <View style={[styles.toolIconContainer, { backgroundColor: `${tool.color}20` }]}>

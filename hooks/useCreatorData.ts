@@ -38,7 +38,6 @@ export interface CreatorData {
   is_active: boolean;
   manager?: ManagerData | null;
   user_role?: string | null;
-  is_manager: boolean;
 }
 
 export interface CreatorStats {
@@ -100,31 +99,11 @@ export function useCreatorData(creatorHandle: string = 'avelezsanti') {
         .single();
 
       let userRole: string | null = null;
-      let isManager = false;
-
       if (userError) {
         console.warn('[useCreatorData] User fetch error (might not exist):', userError);
       } else if (userData) {
         userRole = userData.role;
         console.log('[useCreatorData] User role loaded:', userRole);
-
-        // Check if this user exists in the managers table
-        const { data: managerCheck, error: managerCheckError } = await supabase
-          .from('managers')
-          .select('id')
-          .eq('user_id', userData.id)
-          .maybeSingle();
-
-        if (managerCheckError) {
-          console.warn('[useCreatorData] Manager check error:', managerCheckError);
-          isManager = false;
-        } else if (managerCheck) {
-          isManager = true;
-          console.log('[useCreatorData] ✅✅✅ USER IS A MANAGER - manager record found:', managerCheck.id);
-          console.log('[useCreatorData] ✅✅✅ Setting is_manager to TRUE');
-        } else {
-          console.log('[useCreatorData] ❌ User is NOT a manager - no manager record found');
-        }
       }
 
       // Fetch manager data if assigned
@@ -177,17 +156,19 @@ export function useCreatorData(creatorHandle: string = 'avelezsanti') {
         ...creatorData,
         manager: managerData,
         user_role: userRole,
-        is_manager: isManager,
       };
 
-      console.log('[useCreatorData] ========================================');
-      console.log('[useCreatorData] FINAL CREATOR DATA:');
-      console.log('[useCreatorData] handle:', transformedCreator.creator_handle);
-      console.log('[useCreatorData] name:', `${transformedCreator.first_name} ${transformedCreator.last_name}`);
-      console.log('[useCreatorData] user_role:', transformedCreator.user_role);
-      console.log('[useCreatorData] is_manager:', transformedCreator.is_manager);
-      console.log('[useCreatorData] 🎯 MANAGER BADGE SHOULD SHOW:', transformedCreator.is_manager ? 'YES ✅✅✅' : 'NO ❌');
-      console.log('[useCreatorData] ========================================');
+      console.log('[useCreatorData] Final creator data:', {
+        handle: transformedCreator.creator_handle,
+        name: `${transformedCreator.first_name} ${transformedCreator.last_name}`,
+        diamonds: transformedCreator.total_diamonds,
+        monthlyDiamonds: transformedCreator.diamonds_monthly,
+        liveDays: transformedCreator.live_days_30d,
+        liveHours: Math.floor(transformedCreator.live_duration_seconds_30d / 3600),
+        hasManager: !!managerData,
+        managerName: managerData ? `${managerData.first_name} ${managerData.last_name}` : 'None',
+        userRole: userRole
+      });
       
       setCreator(transformedCreator);
       setError(null);
