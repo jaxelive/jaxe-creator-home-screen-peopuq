@@ -5,6 +5,7 @@ import { Stack, router } from 'expo-router';
 import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
 import { useFonts, Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold } from '@expo-google-fonts/poppins';
+import { useCreatorData } from '@/hooks/useCreatorData';
 
 interface ToolItem {
   id: string;
@@ -16,7 +17,19 @@ interface ToolItem {
   color: string;
 }
 
-const TOOLS: ToolItem[] = [
+const MANAGER_TOOLS: ToolItem[] = [
+  {
+    id: 'manager-portal',
+    title: 'Manager Portal',
+    description: 'View your manager dashboard',
+    icon: 'person.3.fill',
+    androidIcon: 'group',
+    route: '/(tabs)/manager-portal',
+    color: '#10B981',
+  },
+];
+
+const CREATOR_TOOLS: ToolItem[] = [
   {
     id: 'academy',
     title: 'Academy',
@@ -90,6 +103,18 @@ export default function ToolsScreen() {
     Poppins_700Bold,
   });
 
+  const { creator, loading } = useCreatorData('avelezsanti');
+
+  // Check if user is a manager
+  const isManager = creator?.user_role === 'manager';
+
+  console.log('[ToolsScreen] User role check:', {
+    userRole: creator?.user_role,
+    isManager,
+    creatorLoaded: !!creator,
+    loading,
+  });
+
   return (
     <>
       <Stack.Screen
@@ -101,35 +126,82 @@ export default function ToolsScreen() {
         }}
       />
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Creator Tools</Text>
-          <Text style={styles.headerSubtitle}>
+        {/* Manager Tools Section - Only visible if user is a manager */}
+        {isManager && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <IconSymbol
+                ios_icon_name="star.fill"
+                android_material_icon_name="star"
+                size={24}
+                color="#10B981"
+              />
+              <Text style={styles.sectionTitle}>Manager Tools</Text>
+            </View>
+            <Text style={styles.sectionSubtitle}>
+              Manage your team and track performance
+            </Text>
+
+            <View style={styles.toolsGrid}>
+              {MANAGER_TOOLS.map((tool) => (
+                <TouchableOpacity
+                  key={tool.id}
+                  style={styles.toolCard}
+                  onPress={() => router.push(tool.route as any)}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.toolIconContainer, { backgroundColor: `${tool.color}20` }]}>
+                    <IconSymbol
+                      ios_icon_name={tool.icon}
+                      android_material_icon_name={tool.androidIcon}
+                      size={32}
+                      color={tool.color}
+                    />
+                  </View>
+                  <Text style={styles.toolTitle}>{tool.title}</Text>
+                  <Text style={styles.toolDescription}>{tool.description}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* Creator Tools Section */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <IconSymbol
+              ios_icon_name="sparkles"
+              android_material_icon_name="auto-awesome"
+              size={24}
+              color={colors.primary}
+            />
+            <Text style={styles.sectionTitle}>Creator Tools</Text>
+          </View>
+          <Text style={styles.sectionSubtitle}>
             Everything you need to grow your creator journey
           </Text>
-        </View>
 
-        {/* Tools Grid */}
-        <View style={styles.toolsGrid}>
-          {TOOLS.map((tool) => (
-            <TouchableOpacity
-              key={tool.id}
-              style={styles.toolCard}
-              onPress={() => router.push(tool.route as any)}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.toolIconContainer, { backgroundColor: `${tool.color}20` }]}>
-                <IconSymbol
-                  ios_icon_name={tool.icon}
-                  android_material_icon_name={tool.androidIcon}
-                  size={32}
-                  color={tool.color}
-                />
-              </View>
-              <Text style={styles.toolTitle}>{tool.title}</Text>
-              <Text style={styles.toolDescription}>{tool.description}</Text>
-            </TouchableOpacity>
-          ))}
+          <View style={styles.toolsGrid}>
+            {CREATOR_TOOLS.map((tool) => (
+              <TouchableOpacity
+                key={tool.id}
+                style={styles.toolCard}
+                onPress={() => router.push(tool.route as any)}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.toolIconContainer, { backgroundColor: `${tool.color}20` }]}>
+                  <IconSymbol
+                    ios_icon_name={tool.icon}
+                    android_material_icon_name={tool.androidIcon}
+                    size={32}
+                    color={tool.color}
+                  />
+                </View>
+                <Text style={styles.toolTitle}>{tool.title}</Text>
+                <Text style={styles.toolDescription}>{tool.description}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
       </ScrollView>
     </>
@@ -145,20 +217,26 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 120,
   },
-  header: {
-    marginBottom: 32,
+  section: {
+    marginBottom: 40,
   },
-  headerTitle: {
-    fontSize: 32,
-    fontFamily: 'Poppins_700Bold',
-    color: colors.text,
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
     marginBottom: 8,
   },
-  headerSubtitle: {
+  sectionTitle: {
+    fontSize: 28,
+    fontFamily: 'Poppins_700Bold',
+    color: colors.text,
+  },
+  sectionSubtitle: {
     fontSize: 16,
     fontFamily: 'Poppins_400Regular',
     color: colors.textSecondary,
     lineHeight: 24,
+    marginBottom: 24,
   },
   toolsGrid: {
     flexDirection: 'row',
