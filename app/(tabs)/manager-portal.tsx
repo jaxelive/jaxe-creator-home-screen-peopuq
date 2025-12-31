@@ -522,6 +522,124 @@ export default function ManagerPortalScreen() {
           />
         }
       >
+        {/* MANAGER IDENTITY CARD */}
+        <View style={styles.managerIdentityCard}>
+          <View style={styles.managerHeader}>
+            <Image
+              source={{ uri: profileImageUrl }}
+              style={styles.managerAvatar}
+            />
+            <View style={styles.managerInfo}>
+              <Text style={styles.managerName}>
+                {managerIdentity.first_name} {managerIdentity.last_name}
+              </Text>
+              <View style={styles.managerBadge}>
+                <IconSymbol
+                  ios_icon_name="star.fill"
+                  android_material_icon_name="star"
+                  size={14}
+                  color="#FFFFFF"
+                />
+                <Text style={styles.managerBadgeText}>Manager</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Manager Details */}
+          <View style={styles.managerDetails}>
+            {/* Regions */}
+            {managerIdentity.regions_managed.length > 0 && (
+              <View style={styles.managerDetailRow}>
+                <IconSymbol
+                  ios_icon_name="globe"
+                  android_material_icon_name="public"
+                  size={18}
+                  color={colors.primary}
+                />
+                <Text style={styles.managerDetailText}>
+                  {managerIdentity.regions_managed.join(' • ')}
+                </Text>
+              </View>
+            )}
+
+            {/* Languages */}
+            {managerIdentity.languages.length > 0 && (
+              <View style={styles.managerDetailRow}>
+                <IconSymbol
+                  ios_icon_name="text.bubble.fill"
+                  android_material_icon_name="language"
+                  size={18}
+                  color={colors.primary}
+                />
+                <Text style={styles.managerDetailText}>
+                  {managerIdentity.languages.join(' • ')}
+                </Text>
+              </View>
+            )}
+
+            {/* Manager Since */}
+            {managerIdentity.promoted_to_manager_at && (
+              <View style={styles.managerDetailRow}>
+                <IconSymbol
+                  ios_icon_name="calendar"
+                  android_material_icon_name="event"
+                  size={18}
+                  color={colors.primary}
+                />
+                <Text style={styles.managerDetailText}>
+                  Manager since {formatDate(managerIdentity.promoted_to_manager_at)}
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* Contact Buttons */}
+          <View style={styles.managerActions}>
+            <TouchableOpacity 
+              style={styles.managerActionButton}
+              onPress={() => handleEmailPress(managerIdentity.email)}
+            >
+              <IconSymbol
+                ios_icon_name="envelope.fill"
+                android_material_icon_name="email"
+                size={20}
+                color="#FFFFFF"
+              />
+              <Text style={styles.managerActionText}>Email</Text>
+            </TouchableOpacity>
+
+            {managerIdentity.whatsapp && (
+              <TouchableOpacity 
+                style={styles.managerActionButton}
+                onPress={() => handleWhatsAppPress(managerIdentity.whatsapp!)}
+              >
+                <IconSymbol
+                  ios_icon_name="message.fill"
+                  android_material_icon_name="chat"
+                  size={20}
+                  color="#FFFFFF"
+                />
+                <Text style={styles.managerActionText}>WhatsApp</Text>
+              </TouchableOpacity>
+            )}
+
+            {managerIdentity.tiktok_handle && (
+              <TouchableOpacity 
+                style={styles.managerActionButton}
+                onPress={() => handleTikTokPress(managerIdentity.tiktok_handle!)}
+              >
+                <IconSymbol
+                  ios_icon_name="music.note"
+                  android_material_icon_name="music-note"
+                  size={20}
+                  color="#FFFFFF"
+                />
+                <Text style={styles.managerActionText}>TikTok</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+
         {/* PERFORMANCE SUMMARY SECTION */}
         <View style={styles.performanceCard}>
           <Text style={styles.sectionTitle}>Performance Summary</Text>
@@ -1121,6 +1239,90 @@ const styles = StyleSheet.create({
   content: {
     padding: 20,
     paddingBottom: 40,
+  },
+
+  // MANAGER IDENTITY CARD
+  managerIdentityCard: {
+    backgroundColor: colors.backgroundAlt,
+    borderRadius: 24,
+    padding: 24,
+    marginBottom: 20,
+    borderWidth: 2,
+    borderColor: colors.primary,
+  },
+  managerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  managerAvatar: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    marginRight: 16,
+    borderWidth: 3,
+    borderColor: colors.primary,
+  },
+  managerInfo: {
+    flex: 1,
+  },
+  managerName: {
+    fontSize: 22,
+    fontFamily: 'Poppins_700Bold',
+    color: colors.text,
+    marginBottom: 8,
+  },
+  managerBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    alignSelf: 'flex-start',
+    gap: 6,
+  },
+  managerBadgeText: {
+    fontSize: 13,
+    fontFamily: 'Poppins_700Bold',
+    color: '#FFFFFF',
+  },
+  managerDetails: {
+    gap: 12,
+    marginBottom: 20,
+  },
+  managerDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  managerDetailText: {
+    fontSize: 15,
+    fontFamily: 'Poppins_500Medium',
+    color: colors.text,
+    flex: 1,
+  },
+  managerActions: {
+    flexDirection: 'row',
+    gap: 10,
+    flexWrap: 'wrap',
+  },
+  managerActionButton: {
+    flex: 1,
+    minWidth: 100,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    gap: 8,
+  },
+  managerActionText: {
+    fontSize: 14,
+    fontFamily: 'Poppins_600SemiBold',
+    color: '#FFFFFF',
   },
 
   // PERFORMANCE SUMMARY
