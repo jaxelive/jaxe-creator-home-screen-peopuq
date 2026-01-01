@@ -11,6 +11,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { colors } from '@/styles/commonStyles';
 import { useBattleFlyerGen } from '@/hooks/useBattleFlyerGen';
 import { IconSymbol } from '@/components/IconSymbol';
+import { supabase } from '@/app/integrations/supabase/client';
 
 export default function AIFlyersScreen() {
   const { generate, loading, error, data, reset } = useBattleFlyerGen();
@@ -22,6 +23,98 @@ export default function AIFlyersScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [generatedFlyerUrl, setGeneratedFlyerUrl] = useState<string | null>(null);
+
+  const runDiagnostics = async () => {
+    console.log('=== RUNNING DIAGNOSTICS ===');
+    
+    const diagnostics = {
+      timestamp: new Date().toISOString(),
+      platform: Platform.OS,
+      checks: [] as string[],
+    };
+
+    try {
+      // Check 1: Session
+      console.log('Check 1: Session status...');
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError) {
+        diagnostics.checks.push(`❌ Session Error: ${sessionError.message}`);
+      } else if (!sessionData?.session) {
+        diagnostics.checks.push('❌ No active session - Please log in');
+      } else {
+        diagnostics.checks.push(`✓ Session active for ${sessionData.session.user.email}`);
+        diagnostics.checks.push(`✓ Token expires: ${new Date(sessionData.session.expires_at! * 1000).toLocaleString()}`);
+      }
+
+      // Check 2: Edge Function availability
+      console.log('Check 2: Edge Function availability...');
+      try {
+        const { data: funcData, error: funcError } = await supabase.functions.invoke('generate-battle-flyer', {
+          body: new FormData(), // Empty form to test connectivity
+        });
+        
+        if (funcError) {
+          if (funcError.message?.includes('400') || funcError.message?.includes('Missing required fields')) {
+            diagnostics.checks.push('✓ Edge Function is reachable (returned expected validation error)');
+          } else if (funcError.message?.includes('GEMINI_API_KEY')) {
+            diagnostics.checks.push('❌ GEMINI_API_KEY not configured in Supabase');
+          } else {
+            diagnostics.checks.push(`⚠️ Edge Function error: ${funcError.message}`);
+          }
+        } else {
+          diagnostics.checks.push('✓ Edge Function responded');
+        }
+      } catch (e: any) {
+        diagnostics.checks.push(`❌ Cannot reach Edge Function: ${e.message}`);
+      }
+
+      // Check 3: Storage bucket
+      console.log('Check 3: Storage bucket...');
+      try {
+        const { data: buckets, error: bucketError } = await supabase.storage.listBuckets();
+        
+        if (bucketError) {
+          diagnostics.checks.push(`❌ Storage error: ${bucketError.message}`);
+        } else {
+          const battleFlyersBucket = buckets?.find(b => b.name === 'battle-flyers');
+          if (battleFlyersBucket) {
+            diagnostics.checks.push('✓ battle-flyers bucket exists');
+          } else {
+            diagnostics.checks.push('❌ battle-flyers bucket not found');
+          }
+        }
+      } catch (e: any) {
+        diagnostics.checks.push(`❌ Storage check failed: ${e.message}`);
+      }
+
+      // Check 4: Image picker permissions
+      console.log('Check 4: Permissions...');
+      const { status: mediaStatus } = await ImagePicker.getMediaLibraryPermissionsAsync();
+      const { status: cameraStatus } = await ImagePicker.getCameraPermissionsAsync();
+      
+      diagnostics.checks.push(`${mediaStatus === 'granted' ? '✓' : '❌'} Media library: ${mediaStatus}`);
+      diagnostics.checks.push(`${cameraStatus === 'granted' ? '✓' : '⚠️'} Camera: ${cameraStatus}`);
+
+      console.log('=== DIAGNOSTICS COMPLETE ===');
+      console.log(diagnostics);
+
+      Alert.alert(
+        'Diagnostics Report',
+        diagnostics.checks.join('\n\n'),
+        [
+          { text: 'Copy to Clipboard', onPress: () => {
+            // In a real app, you'd use Clipboard API here
+            console.log('Diagnostics:', JSON.stringify(diagnostics, null, 2));
+          }},
+          { text: 'OK' }
+        ]
+      );
+    } catch (e: any) {
+      console.error('Diagnostics failed:', e);
+      Alert.alert('Diagnostics Failed', e.message);
+    }
+  };
 
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -164,6 +257,11 @@ export default function AIFlyersScreen() {
           headerShown: true,
           headerStyle: { backgroundColor: colors.background },
           headerTintColor: colors.text,
+          headerRight: () => (
+            <TouchableOpacity onPress={runDiagnostics} style={{ marginRight: 16 }}>
+              <IconSymbol ios_icon_name="stethoscope" android_material_icon_name="bug-report" size={24} color={colors.primary} />
+            </TouchableOpacity>
+          ),
         }}
       />
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -179,6 +277,12 @@ export default function AIFlyersScreen() {
           <Text style={styles.headerSubtitle}>Create epic medieval warrior battle flyers</Text>
           <Text style={styles.headerNote}>Powered by Google Gemini AI</Text>
         </LinearGradient>
+
+        {/* Diagnostic Button */}
+        <TouchableOpacity style={styles.diagnosticButton} onPress={runDiagnostics}>
+          <IconSymbol ios_icon_name="stethoscope" android_material_icon_name="bug-report" size={20} color={colors.primary} />
+          <Text style={styles.diagnosticButtonText}>Run Diagnostics</Text>
+        </TouchableOpacity>
 
         {/* Error Display */}
         {error && !loading && (
@@ -341,6 +445,9 @@ export default function AIFlyersScreen() {
                 <Text style={styles.loadingText}>
                   This may take 10-30 seconds. The AI is creating your custom battle flyer...
                 </Text>
+                <Text style={styles.loadingSubtext}>
+                  Check the console logs for detailed progress.
+                </Text>
               </View>
             )}
           </>
@@ -398,7 +505,7 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     padding: 32,
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 16,
   },
   emoji: {
     fontSize: 64,
@@ -423,6 +530,23 @@ const styles = StyleSheet.create({
     color: colors.textTertiary,
     textAlign: 'center',
     marginTop: 8,
+  },
+  diagnosticButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.backgroundAlt,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  diagnosticButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
   },
   errorCard: {
     backgroundColor: '#FF6B6B20',
@@ -590,11 +714,18 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     borderWidth: 1,
     borderColor: colors.border,
+    gap: 8,
   },
   loadingText: {
     fontSize: 14,
     fontWeight: '500',
     color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  loadingSubtext: {
+    fontSize: 12,
+    fontWeight: '400',
+    color: colors.textTertiary,
     textAlign: 'center',
   },
   flyerPreview: {

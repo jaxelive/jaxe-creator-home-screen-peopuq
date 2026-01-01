@@ -32,61 +32,98 @@ export function useBattleFlyerGen() {
   }, []);
 
   const generate = useCallback(async (params: BattleFlyerParams): Promise<BattleFlyerResult | null> => {
-    console.log('Starting flyer generation with params:', {
+    console.log('=== BATTLE FLYER GENERATION START ===');
+    console.log('Params:', {
       title: params.title,
       creatorName: params.creatorName,
       opponentName: params.opponentName,
       battleDate: params.battleDate,
-      hasImage: !!params.image.uri
+      hasImage: !!params.image.uri,
+      imageUri: params.image.uri?.substring(0, 50) + '...'
     });
 
+    // Validation
     if (!params.title.trim() || params.title.length > 40) {
-      setState({ status: 'error', data: null, error: 'Title must be 1-40 characters.' });
+      const error = 'Title must be 1-40 characters.';
+      console.error('Validation error:', error);
+      setState({ status: 'error', data: null, error });
       return null;
     }
 
     if (!params.creatorName.trim() || params.creatorName.length > 40) {
-      setState({ status: 'error', data: null, error: 'Creator name must be 1-40 characters.' });
+      const error = 'Creator name must be 1-40 characters.';
+      console.error('Validation error:', error);
+      setState({ status: 'error', data: null, error });
       return null;
     }
 
     if (!params.opponentName.trim() || params.opponentName.length > 40) {
-      setState({ status: 'error', data: null, error: 'Opponent name must be 1-40 characters.' });
+      const error = 'Opponent name must be 1-40 characters.';
+      console.error('Validation error:', error);
+      setState({ status: 'error', data: null, error });
       return null;
     }
 
     if (!params.battleDate.trim()) {
-      setState({ status: 'error', data: null, error: 'Battle date is required.' });
+      const error = 'Battle date is required.';
+      console.error('Validation error:', error);
+      setState({ status: 'error', data: null, error });
       return null;
     }
 
     if (!params.image.uri) {
-      setState({ status: 'error', data: null, error: 'Face photo is required.' });
+      const error = 'Face photo is required.';
+      console.error('Validation error:', error);
+      setState({ status: 'error', data: null, error });
       return null;
     }
 
+    console.log('✓ Validation passed');
     setState({ status: 'loading', data: null, error: null });
 
     try {
-      console.log('Getting current session...');
+      console.log('Step 1: Getting current session...');
       
       // Get the current session - this will also refresh the token if needed
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
       
       if (sessionError) {
-        console.error('Session error:', sessionError);
-        throw new Error('Authentication error. Please try logging out and back in.');
+        console.error('❌ Session error:', sessionError);
+        throw new Error(`Authentication error: ${sessionError.message}. Please try logging out and back in.`);
       }
 
       if (!sessionData?.session) {
-        console.error('No session found');
+        console.error('❌ No session found');
         throw new Error('Not authenticated. Please log in again.');
       }
 
-      console.log('Session found, user ID:', sessionData.session.user.id);
-      console.log('Access token present:', !!sessionData.session.access_token);
+      console.log('✓ Session found');
+      console.log('  - User ID:', sessionData.session.user.id);
+      console.log('  - User email:', sessionData.session.user.email);
+      console.log('  - Token expires at:', new Date(sessionData.session.expires_at! * 1000).toISOString());
+      console.log('  - Access token length:', sessionData.session.access_token.length);
 
-      console.log('Creating FormData...');
+      // Check if token is about to expire (within 5 minutes)
+      const expiresAt = sessionData.session.expires_at! * 1000;
+      const now = Date.now();
+      const timeUntilExpiry = expiresAt - now;
+      const minutesUntilExpiry = Math.floor(timeUntilExpiry / 60000);
+      
+      console.log('  - Token expires in:', minutesUntilExpiry, 'minutes');
+      
+      if (timeUntilExpiry < 300000) { // Less than 5 minutes
+        console.warn('⚠️ Token is about to expire, refreshing...');
+        const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+        
+        if (refreshError) {
+          console.error('❌ Token refresh failed:', refreshError);
+          throw new Error('Session expired. Please log out and log back in.');
+        }
+        
+        console.log('✓ Token refreshed successfully');
+      }
+
+      console.log('Step 2: Creating FormData...');
       const form = new FormData();
       form.append('title', params.title);
       form.append('creatorName', params.creatorName);
@@ -101,21 +138,26 @@ export function useBattleFlyerGen() {
       };
       
       form.append('image', imageBlob as any);
+      console.log('✓ FormData created with image:', imageBlob.name, imageBlob.type);
 
-      console.log('Calling edge function...');
+      console.log('Step 3: Calling Edge Function...');
+      console.log('  - Function name: generate-battle-flyer');
+      console.log('  - Using supabase.functions.invoke()');
 
-      // Use supabase.functions.invoke with explicit headers
-      // The Supabase client will automatically include the Authorization header with the JWT
+      const startTime = Date.now();
+
+      // Use supabase.functions.invoke which automatically includes the JWT
       const { data, error } = await supabase.functions.invoke('generate-battle-flyer', {
         body: form,
-        headers: {
-          // The Authorization header is automatically added by the Supabase client
-          // We just need to ensure the session is valid
-        },
       });
 
+      const duration = Date.now() - startTime;
+      console.log('  - Request completed in:', duration, 'ms');
+
       if (error) {
-        console.error('Edge function error:', error);
+        console.error('❌ Edge function error:', error);
+        console.error('  - Error message:', error.message);
+        console.error('  - Error details:', JSON.stringify(error, null, 2));
         
         // Check for specific error types
         if (error.message?.includes('GEMINI_API_KEY')) {
@@ -123,11 +165,19 @@ export function useBattleFlyerGen() {
         }
         
         if (error.message?.includes('Unauthorized') || error.message?.includes('401') || error.message?.includes('Not authenticated')) {
-          throw new Error('Authentication failed. Please log out and log back in.');
+          throw new Error('Authentication failed. Your session may have expired. Please log out and log back in.');
         }
         
         if (error.message?.includes('404') || error.message?.includes('Not Found')) {
-          throw new Error('The AI service is not available. Please contact support.');
+          throw new Error('The AI service is not available. The Edge Function may not be deployed. Please contact support.');
+        }
+
+        if (error.message?.includes('timeout') || error.message?.includes('ETIMEDOUT')) {
+          throw new Error('Request timed out. The AI is taking too long to respond. Please try again.');
+        }
+
+        if (error.message?.includes('network') || error.message?.includes('fetch')) {
+          throw new Error('Network error. Please check your internet connection and try again.');
         }
         
         const errorMessage = error.message || error.details || 'Failed to generate flyer';
@@ -135,16 +185,34 @@ export function useBattleFlyerGen() {
       }
 
       if (!data) {
-        throw new Error('No data returned from edge function');
+        console.error('❌ No data returned from edge function');
+        throw new Error('No data returned from edge function. The AI may have failed to generate an image.');
       }
 
+      console.log('✓ Edge function returned data');
+      console.log('  - Response keys:', Object.keys(data));
+
       const result = data as BattleFlyerResult;
-      console.log('Flyer generated successfully:', result);
+      
+      if (!result.url) {
+        console.error('❌ No URL in response:', result);
+        throw new Error('Invalid response: No image URL returned');
+      }
+
+      console.log('✓ Flyer generated successfully!');
+      console.log('  - URL:', result.url);
+      console.log('  - Path:', result.path);
+      console.log('  - Dimensions:', result.width, 'x', result.height);
+      console.log('  - Generation time:', result.duration_ms, 'ms');
+      console.log('=== BATTLE FLYER GENERATION SUCCESS ===');
+
       setState({ status: 'success', data: result, error: null });
       return result;
     } catch (err: any) {
       const message = err?.message ?? 'Unknown error occurred';
-      console.error('Error generating flyer:', message, err);
+      console.error('❌ Error generating flyer:', message);
+      console.error('❌ Full error:', err);
+      console.error('=== BATTLE FLYER GENERATION FAILED ===');
       setState({ status: 'error', data: null, error: message });
       return null;
     }
