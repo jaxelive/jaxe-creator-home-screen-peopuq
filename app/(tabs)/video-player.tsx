@@ -51,7 +51,7 @@ export default function VideoPlayerScreen() {
     if (!videoId || hasMarkedWatchedRef.current) return;
 
     try {
-      console.log('[VideoPlayer] Marking video as watched:', videoId);
+      console.log('[VideoPlayer] 🎬 Marking video as watched:', videoId);
       hasMarkedWatchedRef.current = true;
 
       const { error } = await supabase
@@ -68,13 +68,13 @@ export default function VideoPlayerScreen() {
         });
 
       if (error) {
-        console.error('[VideoPlayer] Error marking video as watched:', error);
+        console.error('[VideoPlayer] ❌ Error marking video as watched:', error);
       } else {
-        console.log('[VideoPlayer] Video marked as watched successfully');
+        console.log('[VideoPlayer] ✅ Video marked as watched successfully');
         setIsCompleted(true);
       }
     } catch (error: any) {
-      console.error('[VideoPlayer] Exception marking video as watched:', error);
+      console.error('[VideoPlayer] ❌ Exception marking video as watched:', error);
     }
   }, [videoId]);
 
@@ -85,6 +85,7 @@ export default function VideoPlayerScreen() {
       setLoading(true);
 
       // Fetch video data
+      console.log('[VideoPlayer] 📹 Fetching video data for:', videoId);
       const { data: video, error: videoError } = await supabase
         .from('course_videos')
         .select('*')
@@ -92,12 +93,14 @@ export default function VideoPlayerScreen() {
         .single();
 
       if (videoError) throw videoError;
+      console.log('[VideoPlayer] ✅ Video data loaded:', video.title);
       setVideoData(video);
 
       // Mark video as watched immediately when opened
       await markVideoAsWatched();
 
       // Fetch existing progress using creator_handle
+      console.log('[VideoPlayer] 📊 Fetching existing progress...');
       const { data: progress, error: progressError } = await supabase
         .from('user_video_progress')
         .select('*')
@@ -106,6 +109,10 @@ export default function VideoPlayerScreen() {
         .single();
 
       if (progress && !progressError) {
+        console.log('[VideoPlayer] 📊 Existing progress found:', {
+          watched_seconds: progress.watched_seconds,
+          completed: progress.completed,
+        });
         setWatchedSeconds(progress.watched_seconds || 0);
         setIsCompleted(progress.completed || false);
         
@@ -114,9 +121,11 @@ export default function VideoPlayerScreen() {
           const percentage = Math.min(100, Math.round((progress.watched_seconds / video.duration_seconds) * 100));
           setProgressPercentage(percentage);
         }
+      } else {
+        console.log('[VideoPlayer] 📊 No existing progress found');
       }
     } catch (error: any) {
-      console.error('[VideoPlayer] Error fetching video data:', error);
+      console.error('[VideoPlayer] ❌ Error fetching video data:', error);
       Alert.alert('Error', 'Failed to load video');
     } finally {
       setLoading(false);
@@ -132,7 +141,7 @@ export default function VideoPlayerScreen() {
     }
 
     try {
-      console.log('[VideoPlayer] Updating progress:', currentTime, 'seconds');
+      console.log('[VideoPlayer] 💾 Updating progress:', currentTime, 'seconds');
       
       const { error } = await supabase
         .from('user_video_progress')
@@ -147,13 +156,13 @@ export default function VideoPlayerScreen() {
         });
 
       if (error) {
-        console.error('[VideoPlayer] Error updating progress:', error);
+        console.error('[VideoPlayer] ❌ Error updating progress:', error);
       } else {
         lastSavedProgressRef.current = currentTime;
-        console.log('[VideoPlayer] Progress saved successfully');
+        console.log('[VideoPlayer] ✅ Progress saved successfully');
       }
     } catch (error: any) {
-      console.error('[VideoPlayer] Exception updating progress:', error);
+      console.error('[VideoPlayer] ❌ Exception updating progress:', error);
     }
   }, [videoId, videoData]);
 
@@ -257,6 +266,13 @@ export default function VideoPlayerScreen() {
             <Text style={styles.description}>{videoData.description}</Text>
           )}
 
+          {/* Progress indicator */}
+          {isCompleted && (
+            <View style={styles.completedBadge}>
+              <Text style={styles.completedBadgeText}>✓ Marked as Watched</Text>
+            </View>
+          )}
+
           <View style={styles.buttonContainer}>
             <TouchableOpacity
               style={styles.backButton}
@@ -317,6 +333,20 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     lineHeight: 24,
     marginBottom: 24,
+  },
+  completedBadge: {
+    backgroundColor: 'rgba(102, 66, 239, 0.1)',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  completedBadgeText: {
+    fontSize: 14,
+    fontFamily: 'Poppins_600SemiBold',
+    color: colors.primary,
+    textAlign: 'center',
   },
   buttonContainer: {
     gap: 12,

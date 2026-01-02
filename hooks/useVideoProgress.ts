@@ -33,7 +33,7 @@ export function useVideoProgress(courseVideos?: { id: string; duration_seconds: 
 
   const fetchVideoProgress = useCallback(async () => {
     try {
-      console.log('[useVideoProgress] Fetching video progress for creator:', CREATOR_HANDLE);
+      console.log('[useVideoProgress] 🔄 Fetching video progress for creator:', CREATOR_HANDLE);
       setLoading(true);
       setError(null);
 
@@ -43,12 +43,13 @@ export function useVideoProgress(courseVideos?: { id: string; duration_seconds: 
         .eq('creator_handle', CREATOR_HANDLE);
 
       if (progressError) {
-        console.error('[useVideoProgress] Error fetching video progress:', progressError);
+        console.error('[useVideoProgress] ❌ Error fetching video progress:', progressError);
         setError(progressError.message);
         return;
       }
 
-      console.log('[useVideoProgress] Video progress fetched:', progressData?.length || 0);
+      console.log('[useVideoProgress] ✅ Video progress fetched:', progressData?.length || 0, 'records');
+      console.log('[useVideoProgress] 📊 Progress data:', JSON.stringify(progressData, null, 2));
 
       // Calculate progress percentage for each video
       const progressWithPercentage = progressData?.map((p: any) => {
@@ -66,17 +67,21 @@ export function useVideoProgress(courseVideos?: { id: string; duration_seconds: 
           ? Math.min(100, Math.round((p.watched_seconds / duration) * 100))
           : 0;
 
-        return {
+        const result = {
           video_id: p.video_id,
           completed: p.completed || false,
           watched_seconds: p.watched_seconds || 0,
           progress_percentage: percentage,
         };
+
+        console.log(`[useVideoProgress] 📹 Video ${p.video_id.substring(0, 8)}... - Completed: ${result.completed}, Watched: ${result.watched_seconds}s`);
+
+        return result;
       }) || [];
 
       setVideoProgress(progressWithPercentage);
     } catch (err: any) {
-      console.error('[useVideoProgress] Exception fetching video progress:', err);
+      console.error('[useVideoProgress] ❌ Exception fetching video progress:', err);
       setError(err.message);
     } finally {
       setLoading(false);
@@ -88,23 +93,32 @@ export function useVideoProgress(courseVideos?: { id: string; duration_seconds: 
   }, [fetchVideoProgress]);
 
   const getVideoProgress = useCallback((videoId: string): VideoProgress | undefined => {
-    return videoProgress.find(p => p.video_id === videoId);
+    const progress = videoProgress.find(p => p.video_id === videoId);
+    console.log(`[useVideoProgress] 🔍 Getting progress for video ${videoId.substring(0, 8)}...`, progress ? `Completed: ${progress.completed}` : 'Not found');
+    return progress;
   }, [videoProgress]);
 
   const isVideoWatched = useCallback((videoId: string): boolean => {
     const progress = videoProgress.find(p => p.video_id === videoId);
-    return progress?.completed || false;
+    const watched = progress?.completed || false;
+    console.log(`[useVideoProgress] ✓ Is video ${videoId.substring(0, 8)}... watched?`, watched);
+    return watched;
   }, [videoProgress]);
 
   const getCourseProgress = useCallback((courseId: string, courseVideos: { id: string }[]): CourseProgress => {
     const totalVideos = courseVideos.length;
-    const watchedVideos = courseVideos.filter(video => isVideoWatched(video.id)).length;
+    const watchedVideos = courseVideos.filter(video => {
+      const progress = videoProgress.find(p => p.video_id === video.id);
+      return progress?.completed || false;
+    }).length;
+    
+    console.log(`[useVideoProgress] 📚 Course ${courseId.substring(0, 8)}... progress: ${watchedVideos}/${totalVideos}`);
     
     return {
       completed: watchedVideos,
       total: totalVideos,
     };
-  }, [isVideoWatched]);
+  }, [videoProgress]);
 
   return {
     videoProgress,
