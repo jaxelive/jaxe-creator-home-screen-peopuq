@@ -1,5 +1,5 @@
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/app/integrations/supabase/client';
 
 interface VideoProgress {
@@ -30,6 +30,12 @@ export function useVideoProgress(courseVideos?: { id: string; duration_seconds: 
   const [videoProgress, setVideoProgress] = useState<VideoProgress[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const courseVideosRef = useRef(courseVideos);
+
+  // Update ref when courseVideos changes
+  useEffect(() => {
+    courseVideosRef.current = courseVideos;
+  }, [courseVideos]);
 
   const fetchVideoProgress = useCallback(async () => {
     try {
@@ -45,6 +51,7 @@ export function useVideoProgress(courseVideos?: { id: string; duration_seconds: 
       if (progressError) {
         console.error('[useVideoProgress] ❌ Error fetching video progress:', progressError);
         setError(progressError.message);
+        setLoading(false);
         return;
       }
 
@@ -56,8 +63,8 @@ export function useVideoProgress(courseVideos?: { id: string; duration_seconds: 
         let duration = 0;
 
         // Find duration from courseVideos if provided
-        if (courseVideos) {
-          const video = courseVideos.find(v => v.id === p.video_id);
+        if (courseVideosRef.current) {
+          const video = courseVideosRef.current.find(v => v.id === p.video_id);
           if (video?.duration_seconds) {
             duration = video.duration_seconds;
           }
@@ -80,13 +87,13 @@ export function useVideoProgress(courseVideos?: { id: string; duration_seconds: 
       }) || [];
 
       setVideoProgress(progressWithPercentage);
+      setLoading(false);
     } catch (err: any) {
       console.error('[useVideoProgress] ❌ Exception fetching video progress:', err);
       setError(err.message);
-    } finally {
       setLoading(false);
     }
-  }, [courseVideos]);
+  }, []); // Remove courseVideos from dependencies to prevent infinite loop
 
   useEffect(() => {
     fetchVideoProgress();

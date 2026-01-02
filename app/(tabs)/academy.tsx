@@ -121,7 +121,7 @@ export default function AcademyScreen() {
   );
 
   // Use the video progress hook
-  const { videoProgress, refetch: refetchVideoProgress, isVideoWatched } = useVideoProgress(allCourseVideos);
+  const { videoProgress, loading: progressLoading, refetch: refetchVideoProgress, isVideoWatched, getCourseProgress } = useVideoProgress(allCourseVideos);
 
   // Refetch video progress when screen comes into focus
   useFocusEffect(
@@ -135,6 +135,14 @@ export default function AcademyScreen() {
     console.log('[Academy] Component mounted for creator:', CREATOR_HANDLE);
     fetchAcademyData();
   }, []);
+
+  // Log video progress changes
+  useEffect(() => {
+    console.log('[Academy] 📊 Video progress updated:', videoProgress.length, 'videos tracked');
+    videoProgress.forEach(vp => {
+      console.log(`[Academy] 📹 ${vp.video_id.substring(0, 8)}... - Completed: ${vp.completed}`);
+    });
+  }, [videoProgress]);
 
   const fetchAcademyData = async () => {
     try {
@@ -303,7 +311,8 @@ export default function AcademyScreen() {
 
       setQuizAttempts(latestAttempts);
       
-      // Refetch video progress
+      // Refetch video progress after courses are loaded
+      console.log('[Academy] 🔄 Refetching video progress after data load');
       await refetchVideoProgress();
       
       console.log('[Academy] Data fetch completed successfully');
@@ -388,7 +397,7 @@ export default function AcademyScreen() {
   const isItemCompleted = (item: ContentItem): boolean => {
     if (item.content_type === 'video' && item.video) {
       const watched = isVideoWatched(item.video.id);
-      console.log(`[Academy] 🎬 Checking if video ${item.video.id.substring(0, 8)}... is watched:`, watched);
+      console.log(`[Academy] 🎬 Checking if video ${item.video.id.substring(0, 8)}... (${item.video.title}) is watched:`, watched);
       return watched;
     }
 
@@ -456,18 +465,6 @@ export default function AcademyScreen() {
         Alert.alert('Error', 'Failed to open quiz. Please try again.');
       }
     }
-  };
-
-  const getCourseProgress = (course: Course) => {
-    const videoItems = course.contentItems.filter(item => item.content_type === 'video');
-    const watchedVideos = videoItems.filter(item => {
-      const watched = isVideoWatched(item.video!.id);
-      console.log(`[Academy] 📊 Video ${item.video!.id.substring(0, 8)}... watched:`, watched);
-      return watched;
-    }).length;
-    const totalVideos = videoItems.length;
-    console.log(`[Academy] 📚 Course "${course.title}" progress: ${watchedVideos}/${totalVideos}`);
-    return { completed: watchedVideos, total: totalVideos };
   };
 
   const getVideoNumber = (course: Course, item: ContentItem): number => {
@@ -685,10 +682,13 @@ export default function AcademyScreen() {
             <Text style={styles.sectionTitle}>Courses</Text>
             {courses.map((course) => {
               const isExpanded = expandedCourseId === course.id;
-              const progress = getCourseProgress(course);
+              const videoItems = course.contentItems.filter(item => item.content_type === 'video');
+              const progress = getCourseProgress(course.id, videoItems.map(item => ({ id: item.video!.id })));
               const progressPercentage = progress.total > 0 
                 ? (progress.completed / progress.total) * 100 
                 : 0;
+
+              console.log(`[Academy] 🎨 Rendering course "${course.title}" - Progress: ${progress.completed}/${progress.total} (${progressPercentage.toFixed(0)}%)`);
 
               return (
                 <View key={course.id} style={styles.courseContainer}>
@@ -751,6 +751,8 @@ export default function AcademyScreen() {
                         course.contentItems.map((item, index) => {
                           const isCompleted = isItemCompleted(item);
                           const videoNumber = item.content_type === 'video' ? getVideoNumber(course, item) : 0;
+
+                          console.log(`[Academy] 🎨 Rendering item "${item.content_type === 'video' ? item.video?.title : item.quiz?.title}" - Completed: ${isCompleted}`);
 
                           // Check if quiz is locked
                           const isQuizLocked = item.content_type === 'quiz' && !course.contentItems
