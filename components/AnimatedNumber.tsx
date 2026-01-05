@@ -1,81 +1,56 @@
 
-import React, { useEffect, useState } from 'react';
-import { Text, TextStyle } from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedReaction,
-  withTiming,
-  Easing,
-  runOnJS,
-} from 'react-native-reanimated';
+import React, { useState, useEffect, useRef } from 'react';
+import { Animated, Easing, Text } from 'react-native';
 
 interface AnimatedNumberProps {
   value: number;
   duration?: number;
-  style?: TextStyle;
+  style?: any;
   decimals?: number;
-  prefix?: string;
-  suffix?: string;
-  formatNumber?: boolean;
-  delay?: number;
 }
 
-/**
- * Component that animates numeric values
- * Smoothly transitions from 0 to target value on mount, then from old value to new value
- */
-export function AnimatedNumber({
-  value,
-  duration = 800,
-  style,
-  decimals = 0,
-  prefix = '',
-  suffix = '',
-  formatNumber = true,
-  delay = 0,
+export function AnimatedNumber({ 
+  value = 0, 
+  duration = 800, 
+  style, 
+  decimals = 0 
 }: AnimatedNumberProps) {
-  const [displayValue, setDisplayValue] = useState(0);
-  const [hasAnimated, setHasAnimated] = useState(false);
-  const animatedValue = useSharedValue(0);
+  // Ensure value is always a valid number
+  const safeValue = typeof value === 'number' && !isNaN(value) ? value : 0;
+  
+  const animation = useRef(new Animated.Value(safeValue)).current;
+  const [displayValue, setDisplayValue] = useState(safeValue);
 
   useEffect(() => {
-    // On mount, animate from 0 to the target value
-    const timer = setTimeout(() => {
-      animatedValue.value = withTiming(value, {
-        duration,
-        easing: Easing.out(Easing.cubic),
-      });
-      setHasAnimated(true);
-    }, delay);
+    const targetValue = typeof value === 'number' && !isNaN(value) ? value : 0;
+    
+    // Set the starting value for the animation
+    animation.setValue(displayValue);
+    
+    // Animate to the target value
+    Animated.timing(animation, {
+      toValue: targetValue,
+      duration: duration,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: false,
+    }).start();
 
-    return () => clearTimeout(timer);
-  }, [value]);
+    // Listen to animation updates
+    const listenerId = animation.addListener(({ value: animValue }) => {
+      setDisplayValue(animValue);
+    });
 
-  useEffect(() => {
-    // After initial animation, update when value changes
-    if (hasAnimated) {
-      animatedValue.value = withTiming(value, {
-        duration: duration * 0.6, // Faster for subsequent updates
-        easing: Easing.out(Easing.cubic),
-      });
-    }
-  }, [value, hasAnimated]);
+    // Cleanup listener on unmount or when dependencies change
+    return () => {
+      animation.removeListener(listenerId);
+    };
+  }, [value, duration]);
 
-  // Update display value on animation frame
-  useAnimatedReaction(
-    () => animatedValue.value,
-    (currentValue) => {
-      runOnJS(setDisplayValue)(currentValue);
-    }
-  );
+  // Ensure displayValue is always a valid number before calling toFixed
+  const safeDisplayValue = typeof displayValue === 'number' && !isNaN(displayValue) ? displayValue : 0;
+  const formattedValue = safeDisplayValue.toFixed(decimals);
 
-  const formattedValue = formatNumber
-    ? Math.round(displayValue).toLocaleString()
-    : displayValue.toFixed(decimals);
-
-  return (
-    <Text style={style}>
-      {prefix}{formattedValue}{suffix}
-    </Text>
-  );
+  return <Text style={style}>{formattedValue}</Text>;
 }
+
+export default AnimatedNumber;
