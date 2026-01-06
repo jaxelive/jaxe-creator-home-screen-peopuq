@@ -34,6 +34,7 @@ export const useVideoProgress = (creatorHandle: string) => {
       }
       
       console.log('[useVideoProgress] Fetched', data?.length || 0, 'progress records');
+      console.log('[useVideoProgress] Progress data:', data);
       
       if (isMountedRef.current) {
         setVideoProgress(data || []);
@@ -58,12 +59,14 @@ export const useVideoProgress = (creatorHandle: string) => {
 
   const isVideoWatched = useCallback((videoId: string): boolean => {
     const watched = videoProgress.some(vp => vp.video_id === videoId && vp.completed);
+    console.log('[useVideoProgress] Checking if video', videoId, 'is watched:', watched);
     return watched;
   }, [videoProgress]);
 
   const getCourseProgress = useCallback((courseId: string, videos: any[]): { watched: number; total: number } => {
     const total = videos.length;
     const watched = videos.filter(video => isVideoWatched(video.id)).length;
+    console.log('[useVideoProgress] Course progress:', { watched, total, courseId });
     return { watched, total };
   }, [isVideoWatched]);
 
@@ -74,7 +77,9 @@ export const useVideoProgress = (creatorHandle: string) => {
     }
 
     try {
-      console.log('[useVideoProgress] Marking video as watched:', videoId);
+      console.log('[useVideoProgress] Marking video as watched:', videoId, 'for creator:', creatorHandle);
+      
+      const now = new Date().toISOString();
       
       const { error } = await supabase
         .from('user_video_progress')
@@ -83,8 +88,8 @@ export const useVideoProgress = (creatorHandle: string) => {
           video_id: videoId,
           completed: true,
           watched_seconds: 0,
-          completed_at: new Date().toISOString(),
-          last_watched_at: new Date().toISOString(),
+          completed_at: now,
+          last_watched_at: now,
         }, {
           onConflict: 'creator_handle,video_id'
         });

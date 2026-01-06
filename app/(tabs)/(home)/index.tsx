@@ -134,8 +134,8 @@ export default function HomeScreen() {
   const [courseVideos, setCourseVideos] = useState<{ id: string; duration_seconds: number | null }[]>([]);
   const hasInitializedRef = useRef(false);
 
-  // Use video progress hook with CREATOR_HANDLE (not courseVideos)
-  const { videoProgress, refetch: refetchVideoProgress, getCourseProgress } = useVideoProgress(CREATOR_HANDLE);
+  // Use video progress hook with CREATOR_HANDLE
+  const { videoProgress, loading: videoProgressLoading, refetch: refetchVideoProgress, getCourseProgress } = useVideoProgress(CREATOR_HANDLE);
 
   // Calculate education progress from the most recent course
   const educationProgress = mostRecentCourse && courseVideos.length > 0
@@ -153,6 +153,7 @@ export default function HomeScreen() {
   }, []);
 
   const onRefresh = async () => {
+    console.log('[HomeScreen] 🔄 Manual refresh triggered');
     setRefreshing(true);
     await refetch();
     await fetchBattleData();
@@ -162,6 +163,7 @@ export default function HomeScreen() {
     await fetchFeaturedLiveEvent();
     await checkUnreadNotifications();
     await refetchVideoProgress();
+    console.log('[HomeScreen] ✅ Manual refresh completed');
     setRefreshing(false);
   };
 
@@ -293,6 +295,8 @@ export default function HomeScreen() {
     if (!creator) return;
 
     try {
+      console.log('[HomeScreen] 📚 Fetching education data...');
+      
       // Get the most recent published course
       const { data: courseData, error: courseError } = await supabase
         .from('courses')
@@ -312,11 +316,14 @@ export default function HomeScreen() {
       }
 
       if (courseData) {
+        console.log('[HomeScreen] 📖 Course found:', courseData.title);
+        
         // Get videos for this course
         const { data: videosData, error: videosError } = await supabase
           .from('course_videos')
           .select('id, duration_seconds')
-          .eq('course_id', courseData.id);
+          .eq('course_id', courseData.id)
+          .order('order_index', { ascending: true });
 
         if (videosError && videosError.code !== 'PGRST116') {
           console.error('[HomeScreen] Error fetching course videos:', videosError);
@@ -325,18 +332,15 @@ export default function HomeScreen() {
         const videos = videosData || [];
         const totalVideos = videos.length;
         
+        console.log('[HomeScreen] 🎥 Videos found:', totalVideos);
+        console.log('[HomeScreen] 📹 Video IDs:', videos.map(v => v.id));
+        
         setCourseVideos(videos);
         setMostRecentCourse({
           id: courseData.id,
           title: courseData.title,
           cover_image_url: courseData.cover_image_url,
           total_videos: totalVideos,
-        });
-
-        console.log('[HomeScreen] Most recent course:', {
-          title: courseData.title,
-          totalVideos,
-          coverImage: courseData.cover_image_url,
         });
       }
 
@@ -381,6 +385,8 @@ export default function HomeScreen() {
           }
         }
       }
+      
+      console.log('[HomeScreen] ✅ Education data fetch completed');
     } catch (error: any) {
       console.error('[HomeScreen] Unexpected error fetching education data:', error);
     }
@@ -532,14 +538,25 @@ export default function HomeScreen() {
         fetchFeaturedLiveEvent(),
         checkUnreadNotifications(),
       ]).then(() => {
-        console.log('[HomeScreen] All data initialized successfully');
+        console.log('[HomeScreen] ✅ All data initialized successfully');
         // Refetch video progress after course data is loaded
         refetchVideoProgress();
       }).catch((err) => {
-        console.error('[HomeScreen] Error during initialization:', err);
+        console.error('[HomeScreen] ❌ Error during initialization:', err);
       });
     }
   }, [creator, fetchBattleData, fetchChallengeData, fetchEducationData, fetchTopCreators, fetchFeaturedLiveEvent, checkUnreadNotifications, refetchVideoProgress]);
+
+  // Log video progress changes
+  useEffect(() => {
+    console.log('[HomeScreen] 📊 Video progress updated:', {
+      totalProgress: videoProgress.length,
+      educationProgress,
+      totalCourseVideos,
+      courseVideos: courseVideos.length,
+      videoProgressLoading,
+    });
+  }, [videoProgress, educationProgress, totalCourseVideos, courseVideos, videoProgressLoading]);
 
   const handleRegisterForEvent = async (eventId: string) => {
     if (registeringEventId) return;
