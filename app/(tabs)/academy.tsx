@@ -118,11 +118,12 @@ export default function AcademyScreen() {
     fetchAcademyData();
   }, []);
 
-  // Refetch video progress when screen comes into focus
+  // Refetch video progress and quiz attempts when screen comes into focus
   useFocusEffect(
     useCallback(() => {
-      console.log('[Academy] Screen focused - refetching video progress');
+      console.log('[Academy] Screen focused - refetching data');
       refetchVideoProgress();
+      fetchAcademyData();
     }, [refetchVideoProgress])
   );
 
@@ -424,7 +425,7 @@ export default function AcademyScreen() {
       }
       
       try {
-        // Navigate to quiz screen - quizzes can always be retaken
+        // Navigate to quiz screen - quizzes can always be retaken regardless of previous score
         router.push({
           pathname: '/(tabs)/quiz',
           params: { 
@@ -433,6 +434,12 @@ export default function AcademyScreen() {
           },
         });
         console.log('[Academy] Quiz navigation initiated');
+        
+        // Refetch quiz attempts after returning from quiz
+        setTimeout(async () => {
+          console.log('[Academy] Refetching quiz attempts after navigation...');
+          await fetchAcademyData();
+        }, 1000);
       } catch (error) {
         console.error('[Academy] Error navigating to quiz:', error);
         Alert.alert('Error', 'Failed to open quiz. Please try again.');
@@ -905,9 +912,12 @@ export default function AcademyScreen() {
                                 )}
                                 
                                 {item.content_type === 'quiz' && !isQuizLocked && !quizAttempt && (
-                                  <Text style={styles.videoDuration}>
-                                    {item.quiz?.required_correct_answers || 0} correct answers required
-                                  </Text>
+                                  <View style={styles.quizActionContainer}>
+                                    <Text style={styles.videoDuration}>
+                                      {item.quiz?.required_correct_answers || 0} correct answers required
+                                    </Text>
+                                    <Text style={styles.quizActionText}>Tap to start</Text>
+                                  </View>
                                 )}
                                 
                                 {item.content_type === 'quiz' && quizAttempt && (
@@ -951,7 +961,7 @@ export default function AcademyScreen() {
             color={colors.primary}
           />
           <Text style={styles.infoText}>
-            Videos are marked as watched when you open them. Complete all videos and pass the final quiz (70% required) in the Creator Journey course to become a certified JAXE creator. Quizzes can be retaken as many times as needed.
+            Videos are marked as watched when you open them. Complete all videos to unlock quizzes. Quizzes can be retaken as many times as needed - your previous results are always saved. The latest attempt is shown on your progress.
           </Text>
         </View>
       </ScrollView>
@@ -1249,6 +1259,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'Poppins_500Medium',
     color: '#A0A0A0',
+    marginTop: 4,
+  },
+  quizActionContainer: {
+    marginTop: 8,
+  },
+  quizActionText: {
+    fontSize: 12,
+    fontFamily: 'Poppins_600SemiBold',
+    color: colors.primary,
     marginTop: 4,
   },
   quizResultContainer: {

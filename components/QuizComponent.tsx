@@ -1,25 +1,4 @@
 
-import { colors } from '@/styles/commonStyles';
-import { supabase } from '@/app/integrations/supabase/client';
-import { IconSymbol } from '@/components/IconSymbol';
-import { LinearGradient } from 'expo-linear-gradient';
-import * as Haptics from 'expo-haptics';
-import { useFonts, Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold } from '@expo-google-fonts/poppins';
-import Animated, {
-  FadeIn,
-  FadeOut,
-  SlideInRight,
-  SlideOutLeft,
-  ZoomIn,
-  ZoomOut,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-  withTiming,
-  withSequence,
-  Easing,
-  interpolate,
-} from 'react-native-reanimated';
 import {
   View,
   Text,
@@ -30,6 +9,27 @@ import {
   Alert,
 } from 'react-native';
 import React, { useState, useEffect, useRef } from 'react';
+import { useFonts, Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold } from '@expo-google-fonts/poppins';
+import * as Haptics from 'expo-haptics';
+import Animated, {
+  FadeIn,
+  FadeOut,
+  SlideInRight,
+  SlideOutLeft,
+  ZoomIn,
+  ZoomOut,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withSequence,
+  Easing,
+  interpolate,
+} from 'react-native-reanimated';
+import { LinearGradient } from 'expo-linear-gradient';
+import { IconSymbol } from '@/components/IconSymbol';
+import { colors } from '@/styles/commonStyles';
+import { supabase } from '@/app/integrations/supabase/client';
+import { RetakeQuizModal } from '@/components/RetakeQuizModal';
 
 interface QuizAnswer {
   id: string;
@@ -76,6 +76,8 @@ const QuizComponent: React.FC<QuizComponentProps> = ({
   const [score, setScore] = useState(0);
   const [correctAnswers, setCorrectAnswers] = useState(0);
   const [analyzing, setAnalyzing] = useState(false);
+  const [showRetakeModal, setShowRetakeModal] = useState(false);
+  const [isRetaking, setIsRetaking] = useState(false);
 
   const progressScale = useSharedValue(0);
   const celebrationScale = useSharedValue(0);
@@ -245,12 +247,34 @@ const QuizComponent: React.FC<QuizComponentProps> = ({
     // Save quiz attempt to user_quiz_attempts table
     try {
       console.log('[QuizComponent] Saving quiz attempt');
+      
+      // Get the latest attempt number for this quiz
+      const { data: existingAttempts, error: fetchError } = await supabase
+        .from('user_quiz_attempts')
+        .select('attempt_number')
+        .eq('creator_handle', creatorHandle)
+        .eq('quiz_id', quizId)
+        .order('attempt_number', { ascending: false })
+        .limit(1);
+
+      if (fetchError) {
+        console.error('[QuizComponent] Error fetching existing attempts:', fetchError);
+      }
+
+      const nextAttemptNumber = existingAttempts && existingAttempts.length > 0 
+        ? (existingAttempts[0].attempt_number || 0) + 1 
+        : 1;
+
+      console.log('[QuizComponent] Creating attempt number:', nextAttemptNumber);
+
       const { error } = await supabase.from('user_quiz_attempts').insert({
         quiz_id: quizId,
         creator_handle: creatorHandle,
         score: calculatedScore,
         passed,
         answers: selectedAnswers,
+        attempt_number: nextAttemptNumber,
+        submitted_at: new Date().toISOString(),
       });
 
       if (error) {
@@ -270,16 +294,36 @@ const QuizComponent: React.FC<QuizComponentProps> = ({
     }, 2000);
   };
 
-  const handleRetry = () => {
-    console.log('[QuizComponent] Retrying quiz');
+  const handleRetryClick = () => {
+    console.log('[QuizComponent] Retake button clicked');
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setCurrentQuestionIndex(0);
-    setSelectedAnswers({});
-    setShowResults(false);
-    setScore(0);
-    setCorrectAnswers(0);
-    progressScale.value = 0;
-    celebrationScale.value = 0;
+    setShowRetakeModal(true);
+  };
+
+  const handleRetryConfirm = async () => {
+    console.log('[QuizComponent] Retake confirmed');
+    setShowRetakeModal(false);
+    setIsRetaking(true);
+
+    // Small delay for better UX
+    setTimeout(() => {
+      // Reset quiz state
+      setCurrentQuestionIndex(0);
+      setSelectedAnswers({});
+      setShowResults(false);
+      setScore(0);
+      setCorrectAnswers(0);
+      progressScale.value = 0;
+      celebrationScale.value = 0;
+      setIsRetaking(false);
+      
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }, 300);
+  };
+
+  const handleRetryCancel = () => {
+    console.log('[QuizComponent] Retake cancelled');
+    setShowRetakeModal(false);
   };
 
   if (!fontsLoaded || loading) {
@@ -338,67 +382,83 @@ const QuizComponent: React.FC<QuizComponentProps> = ({
     const passed = score >= quizData.passing_score;
 
     return (
-      <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
-        <Animated.View entering={FadeIn.duration(600)} style={styles.resultsContainer}>
-          <Animated.View style={[styles.resultIconContainer, celebrationStyle]}>
-            <LinearGradient
-              colors={passed ? ['#4CAF50', '#81C784'] : [colors.error, '#EF5350']}
-              style={styles.resultIconGradient}
-            >
-              <IconSymbol
-                ios_icon_name={passed ? 'checkmark.circle.fill' : 'xmark.circle.fill'}
-                android_material_icon_name={passed ? 'check-circle' : 'cancel'}
-                size={80}
-                color="#fff"
-              />
-            </LinearGradient>
+      <>
+        <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+          <Animated.View entering={FadeIn.duration(600)} style={styles.resultsContainer}>
+            <Animated.View style={[styles.resultIconContainer, celebrationStyle]}>
+              <LinearGradient
+                colors={passed ? ['#4CAF50', '#81C784'] : [colors.error, '#EF5350']}
+                style={styles.resultIconGradient}
+              >
+                <IconSymbol
+                  ios_icon_name={passed ? 'checkmark.circle.fill' : 'xmark.circle.fill'}
+                  android_material_icon_name={passed ? 'check-circle' : 'cancel'}
+                  size={80}
+                  color="#fff"
+                />
+              </LinearGradient>
+            </Animated.View>
+
+            <Text style={styles.resultTitle}>
+              {passed ? 'Congratulations!' : 'Keep Trying!'}
+            </Text>
+
+            <Text style={styles.resultSubtitle}>
+              {passed
+                ? 'You passed the quiz!'
+                : `You need ${quizData.passing_score}% to pass`}
+            </Text>
+
+            <View style={styles.scoreCard}>
+              <LinearGradient
+                colors={passed ? ['#4CAF50', '#81C784'] : [colors.primary, colors.secondary]}
+                style={styles.scoreGradient}
+              >
+                <Text style={styles.scoreLabel}>Your Score</Text>
+                <Text style={styles.scoreValue}>{score}%</Text>
+                <Text style={styles.scoreDetails}>
+                  {correctAnswers} out of {quizData.total_questions} correct
+                </Text>
+              </LinearGradient>
+            </View>
+
+            <View style={styles.resultsButtonContainer}>
+              <TouchableOpacity
+                style={[styles.retakeButton]}
+                onPress={handleRetryClick}
+                disabled={isRetaking}
+              >
+                {isRetaking ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <IconSymbol
+                      ios_icon_name="arrow.clockwise"
+                      android_material_icon_name="refresh"
+                      size={20}
+                      color="#fff"
+                    />
+                    <Text style={styles.retakeButtonText}>Retake Quiz</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+                <Text style={styles.closeButtonText}>
+                  {passed ? 'Continue' : 'Close'}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </Animated.View>
+        </ScrollView>
 
-          <Text style={styles.resultTitle}>
-            {passed ? 'Congratulations!' : 'Keep Trying!'}
-          </Text>
-
-          <Text style={styles.resultSubtitle}>
-            {passed
-              ? 'You passed the quiz!'
-              : `You need ${quizData.passing_score}% to pass`}
-          </Text>
-
-          <View style={styles.scoreCard}>
-            <LinearGradient
-              colors={passed ? ['#4CAF50', '#81C784'] : [colors.primary, colors.secondary]}
-              style={styles.scoreGradient}
-            >
-              <Text style={styles.scoreLabel}>Your Score</Text>
-              <Text style={styles.scoreValue}>{score}%</Text>
-              <Text style={styles.scoreDetails}>
-                {correctAnswers} out of {quizData.total_questions} correct
-              </Text>
-            </LinearGradient>
-          </View>
-
-          <View style={styles.resultsButtonContainer}>
-            <TouchableOpacity
-              style={[styles.retakeButton]}
-              onPress={handleRetry}
-            >
-              <IconSymbol
-                ios_icon_name="arrow.clockwise"
-                android_material_icon_name="refresh"
-                size={20}
-                color="#fff"
-              />
-              <Text style={styles.retakeButtonText}>Retake Quiz</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-              <Text style={styles.closeButtonText}>
-                {passed ? 'Continue' : 'Close'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </Animated.View>
-      </ScrollView>
+        <RetakeQuizModal
+          visible={showRetakeModal}
+          onConfirm={handleRetryConfirm}
+          onCancel={handleRetryCancel}
+          quizTitle={quizData.title}
+        />
+      </>
     );
   }
 
